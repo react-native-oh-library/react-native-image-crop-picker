@@ -1,18 +1,19 @@
-import { RNPackage, TurboModulesFactory } from 'rnoh/ts';
-import type { TurboModule, TurboModuleContext } from 'rnoh/ts';
+import { RNPackage, TurboModulesFactory } from '@rnoh/react-native-openharmony/ts';
+import type { TurboModule, TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
 import { ImageCropPickerTurboModule } from './ImageCropPickerTurboModule';
+import { TM } from "@rnoh/react-native-openharmony/generated/ts"
 
 class ImageCropPickerTurboModulesFactory extends TurboModulesFactory {
 
   createTurboModule(name: string): TurboModule | null {
-    if (name === 'ImageCropPicker') {
+    if (name === TM.RNCImageCropPick.NAME) {
       return new ImageCropPickerTurboModule(this.ctx);
     }
     return null;
   }
 
   hasTurboModule(name: string): boolean {
-    return name === 'ImageCropPicker';
+    return name === TM.RNCImageCropPick.NAME;
   }
 
 }
