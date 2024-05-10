@@ -8,7 +8,7 @@ export class CropScaleClass {
   text: string | Resource;
   key: string = '';
 
-  constructor(value: number, ratio: string, cropIndex: number, text: string | Resource, key: string) {
+  constructor(value: number, ratio: string, cropIndex: number, text: string | Resource, key?: string) {
     this.value = value;
     this.ratio = ratio;
     this.cropIndex = cropIndex;
@@ -18,16 +18,16 @@ export class CropScaleClass {
 }
 
 export class DownPos{
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
+  left: number
+  top: number
+  bottom: number
+  right: number
 
-  constructor(left: number, top: number, right: number, bottom: number) {
+  constructor(left: number, top: number, bottom: number, right: number) {
     this.left = left;
     this.top = top;
-    this.right = right;
     this.bottom = bottom;
+    this.right = right;
   }
 }
 

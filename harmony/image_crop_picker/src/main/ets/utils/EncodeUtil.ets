@@ -16,13 +16,13 @@
 import fs from '@ohos.file.fs';
 import image from '@ohos.multimedia.image';
 import Logger from '../Logger';
-import { Constants } from '../utils/Constants';
+import { Constants } from '../utils/Constants'
 import util from '@ohos.util';
 
 const TAG: string = 'imageEdit_Encode';
 
 
-export async function encode(component: Object, pixelMap: ESObject) {
+export async function encode(component: Object, pixelMap: ESObject) : Promise<string> {
   let imgPath: string = '';
   const newPixelMap: ESObject = pixelMap;
   const imagePackerApi = image.createImagePacker();
@@ -31,7 +31,7 @@ export async function encode(component: Object, pixelMap: ESObject) {
     quality: Constants.ENCODE_QUALITY
   }
   let packerData = await imagePackerApi.packing(newPixelMap, packOptions);
-  Logger.info(TAG, 'into compressPictures data: ' + JSON.stringify(packOptions));
+  Logger.info(TAG, 'into compressPictures data: ' + JSON.stringify(packerData));
   const context = getContext(component);
   imgPath = context.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + Constants.IMAGE_FORMAT;
   let newFile = fs.openSync(imgPath, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);

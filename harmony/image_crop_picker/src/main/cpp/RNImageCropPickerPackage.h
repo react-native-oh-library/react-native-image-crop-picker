@@ -3,7 +3,7 @@
 #include "RNImageCropPickerTurboModule.h"
 
 using namespace rnoh;
-using namesapce facebook
+using namespace facebook;
 class RNImageCropPickerFactoryDelegate : public TurboModuleFactoryDelegate {
 public:
     SharedTurboModule createTurboModule(Context ctx, const std::string &name) const override

@@ -450,7 +450,7 @@ export struct ImageEditInfo {
         newPosition.top = this.maxClipSize.top;
       }
     }
-    if(direction.right) {
+    if (direction.right) {
       newPosition.right = this.dragObj.downPos.right + delX;
       let width = newPosition.right - this.clipSize.left;
       if (this.clipRatio > 0) {
@@ -471,12 +471,12 @@ export struct ImageEditInfo {
       if (this.clipRatio > 0) {
         let width = height * this.clipRatio;
         if (width <= this.minSize) {
-          newPosition.top = this.clipSize.top + this.minSize / this.clipRatio;
+          newPosition.bottom = this.clipSize.top + this.minSize / this.clipRatio;
         }
       } else if (height <= this.minSize) {
         newPosition.bottom = this.clipSize.top + this.minSize;
       }
-      if (newPosition.bottom < this.maxClipSize.bottom) {
+      if (newPosition.bottom > this.maxClipSize.bottom) {
         newPosition.bottom = this.maxClipSize.bottom;
       }
     }
@@ -527,7 +527,7 @@ export struct ImageEditInfo {
         newPosition.left = this.clipSize.left - (width - this.clipSize.width()) / 2;
         newPosition.right = this.clipSize.right + (width - this.clipSize.width()) / 2;
         if (width <= this.minSize) {
-          newY = this.clipSize.bottom - this.minSize * this.clipRatio;
+          newY = this.clipSize.bottom - this.minSize / this.clipRatio;
         }
       }
       newPosition.top = newY;

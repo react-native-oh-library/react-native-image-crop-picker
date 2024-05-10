@@ -32,7 +32,7 @@ export async function getPixelMap(uri: string){
   console.log('imageEdit_Decode file:', JSON.stringify(file))
   const fd = file?.fd;
   console.log('imageEdit_Decode fd:', JSON.stringify(fd))
-  // path为已获取得的沙箱路径
+  // path为已获得的沙箱路径
   const imageSource = image.createImageSource(fd);
   console.log('imageEdit_Decode imageSource:', JSON.stringify(imageSource))
   const pixelMap = await imageSource.createPixelMap({
@@ -60,7 +60,7 @@ export async function encode(component: Object, pixelMap: PixelMap) {
   // Create image asset.
   const imageAssetInfo = await media.createAsset(
     mediaLibrary.MediaType.IMAGE,
-    '${Constants.IMAGE_PREFIX}_${currentTime}${Constants.IMAGE_FORMAT}',
+    `${Constants.IMAGE_PREFIX}_${currentTime}${Constants.IMAGE_FORMAT}`,
     publicPath
   );
   const imageFd = await imageAssetInfo.open(Constants.ENCODE_FILE_PERMISSION);

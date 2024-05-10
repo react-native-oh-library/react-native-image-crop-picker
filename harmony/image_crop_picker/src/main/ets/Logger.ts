@@ -6,7 +6,7 @@ class Logger {
   private format: string = '%{public}s, %{public}s';
   private isDebug: boolean;
 
-  constructor(prefix: string = 'MyApp', domain: number = 0xFF00, isDebug: boolean = false) {
+  constructor(prefix: string = 'MyApp', domain: number = 0xFF00, isDebug = false) {
     this.prefix = prefix;
     this.domain = domain;
     this.isDebug = isDebug;

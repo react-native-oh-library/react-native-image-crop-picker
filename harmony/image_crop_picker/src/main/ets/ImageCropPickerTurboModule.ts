@@ -5,7 +5,7 @@ import type Want from '@ohos.app.ability.Want';
 import image from '@ohos.multimedia.image';
 import media from '@ohos.multimedia.media';
 import util from '@ohos.util';
-import picker from '@ohos.file.picker';
+import picker from '@ohos.multimedia.cameraPicker';
 import camera from '@ohos.multimedia.camera';
 import { BusinessError } from '@ohos.base';
 import fs, { Filter } from '@ohos.file.fs';
@@ -20,7 +20,7 @@ const ImageQuality = -1;
 const TAG : string = 'ImageCropPickerTurboModule';
 const WANT_PARAM_URI_SELECT_SINGLE: string = 'singleselect';
 const WANT_PARAM_URI_SELECT_MULTIPLE: string = 'multipleselect';
-const ENTER_GALLERY_ACTION: string = 'ohos.want.action.photoPicker';
+const ENTER_GALLERY_ACTION: string = "ohos.want.action.photoPicker";
 
 let results: ResponseData = { assets: []};
 let imgObj: Asset = {};
@@ -56,7 +56,7 @@ export class Asset {
   filename?: string;
   mime?: string;
   path?: string;
-  size?: string;
+  size?: number;
   height?: string;
   width?: string;
   data?: string;
@@ -167,7 +167,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
         Logger.info(TAG, 'getTempFilePaths img srcPath = '+ srcPath);
         let i = srcPath.lastIndexOf('.');
         let imageType = '';
-        if (i != 1) {
+        if (i != -1) {
           imageType = srcPath.substring(i + 1);
           Logger.info(TAG, 'getTempFilePaths img imageType = '+ imageType);
         }
@@ -189,7 +189,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
     return resultImages;
   }
 
-  async getPickerResult(request: RequestData, sourceFilePaths : Array<string>, tempFilePaths : Array<string>): Promise<RequestData> {
+  async getPickerResult(request: RequestData, sourceFilePaths : Array<string>, tempFilePaths : Array<string>): Promise<ResponseData> {
     Logger.info(TAG, 'into openPickerResult :');
     let images = this.isNullOrUndefined(tempFilePaths) ? sourceFilePaths : tempFilePaths;
     Logger.info(TAG, 'into openPickerResult : images = '+ images);
@@ -197,10 +197,10 @@ export class ImageCropPickerTurboModule extends TurboModule {
     for (let j = 0;j < images.length;j++) {
       imgObj = {};
       let value = images[j];
-      const mineUri = value.substring(0, 4);
+      const mimeUri = value.substring(0, 4)
       let imageType;
       let fileName;
-      if (mineUri === 'file') {
+      if (mimeUri === 'file') {
         let i = value.lastIndexOf('/')
         fileName = value.substring(i + 1)
         i = value.lastIndexOf('.')
@@ -259,9 +259,9 @@ export class ImageCropPickerTurboModule extends TurboModule {
     return results;
   }
 
-  async openCamera(request?: RequestData): Promise<RequestData> {
+  async openCamera(request?: RequestData): Promise<ResponseData> {
     Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(request));
-    let results: RequestData = { assets: []};
+    let results: ResponseData = { assets: []};
     let useFrontCamera = this.isNullOrUndefined(request.useFrontCamera) ? false : request.useFrontCamera;
     let mediaType = request.mediaType == 'photo' ? [picker.PickerMediaType.PHOTO] : (request.mediaType == 'video'
       ? [picker.PickerMediaType.VIDEO] : [picker.PickerMediaType.PHOTO,picker.PickerMediaType.VIDEO]);
@@ -271,7 +271,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
         cameraPosition: useFrontCamera? camera.CameraPosition.CAMERA_POSITION_FRONT : camera.CameraPosition.CAMERA_POSITION_BACK,
       };
       let pickerResult: picker.PickerResult = await picker.pick(mContext, mediaType, pickerProfile);
-      Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(pickerResult));
+      Logger.info(TAG, 'into openCamera results: ' + JSON.stringify(pickerResult));
       imgObj.sourceURL = pickerResult.resultUri;
       results.assets.push(imgObj);
     } catch (error) {
@@ -279,7 +279,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
       Logger.info(TAG, 'into openCamera error: ' + JSON.stringify(err));
     }
     return results;
-  }
+  };
 
   imageToBase64(filePath: string): string {
     Logger.info(TAG, 'into imageToBase64 filePath: ' + filePath);
@@ -289,7 +289,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
       let buf = new ArrayBuffer(4096);
       fs.readSync(file.fd, buf);
       let unit8Array: Uint8Array = new Uint8Array(buf);
-      let base64Helper = new util.Base64Helper;
+      let base64Helper = new util.Base64Helper();
       base64Data = base64Helper.encodeToStringSync(unit8Array, util.Type.BASIC);
       fs.closeSync(file);
       Logger.info(TAG, 'into imageToBase64 base64Data: ' + base64Data);
@@ -300,7 +300,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
   }
 
   isImage(filePath : string) : boolean{
-    Logger.info(TAG, 'into isImage filePath = ' + filePath);
+    Logger.info(TAG, 'into isImage fileName = ' + filePath);
     const imageExtensionsRegex = /\.(jpg|jpeg|png|gif|bmp|webp)$/i;
     return imageExtensionsRegex.test(filePath);
   }
@@ -406,7 +406,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
           "bundleName": bundleName,
           "abilityName": "ImageEditAbility",
           parameters: {
-            "imageUri": uri
+            'imageUri': uri,
           }
         }
         this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
@@ -414,11 +414,12 @@ export class ImageCropPickerTurboModule extends TurboModule {
           imgObj.sourceURL = imgPath;
           results.assets.push(imgObj);
           AppStorage.setOrCreate('cropImagePath', '')
-          Logger.info(TAG, "into openCropper startAbility suc : " + imgPath);
+          Logger.info(TAG, 'into openCropper startAbility suc : ' + imgPath);
           res(results);
         } );
       } catch (err) {
         Logger.info(TAG, 'into openCropper startAbility err: ' + JSON.stringify(err));
+        rej(results)
       }
     })
   }
