@@ -6,14 +6,14 @@ import { TM } from "@rnoh/react-native-openharmony/generated/ts"
 class ImageCropPickerTurboModulesFactory extends TurboModulesFactory {
 
   createTurboModule(name: string): TurboModule | null {
-    if (name === TM.RNCImageCropPick.NAME) {
+    if (name === TM.RNCImageCropPicker.NAME) {
       return new ImageCropPickerTurboModule(this.ctx);
     }
     return null;
   }
 
   hasTurboModule(name: string): boolean {
-    return name === TM.RNCImageCropPick.NAME;
+    return name === TM.RNCImageCropPicker.NAME;
   }
 
 }

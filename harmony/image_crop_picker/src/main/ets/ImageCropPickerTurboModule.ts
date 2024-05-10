@@ -1,5 +1,5 @@
-import { TurboModule } from '@rnoh/react-native-openharmony/ts';
 import type { TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
+import { TurboModule } from '@rnoh/react-native-openharmony/ts'
 import Logger from './Logger';
 import type Want from '@ohos.app.ability.Want';
 import image from '@ohos.multimedia.image';
