@@ -22,4 +22,10 @@ const ImagePicker = {
     },
 }
 
-module.exports = { ImagePicker }
+export default ImagePicker;
+
+export const openPicker = ImagePicker.openPicker;
+export const openCamera = ImagePicker.openCamera;
+export const openCropper = ImagePicker.openCropper;
+export const clean = ImagePicker.clean;
+export const cleanSingle = ImagePicker.cleanSingle;

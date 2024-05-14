@@ -1,4 +1,5 @@
 import type { TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
+import { TM } from "@rnoh/react-native-openharmony/generated/ts"
 import { TurboModule } from '@rnoh/react-native-openharmony/ts'
 import Logger from './Logger';
 import type Want from '@ohos.app.ability.Want';
@@ -88,7 +89,7 @@ export class AbilityResult {
 }
 
 
-export class ImageCropPickerTurboModule extends TurboModule {
+export class ImageCropPickerTurboModule extends TurboModule interface TM.ImageCropPicker.Spec{
 
   constructor(protected ctx: TurboModuleContext) {
     super(ctx);
@@ -322,7 +323,7 @@ export class ImageCropPickerTurboModule extends TurboModule {
         let imagePMs = await imageISs.createPixelMap() ;
         let imagePackerApi = image.createImagePacker();
         let options: image.PackingOption = {
-          format: 'image/' +imageType,
+          format: 'image/jpeg',
           quality: quality,
         };
         try{

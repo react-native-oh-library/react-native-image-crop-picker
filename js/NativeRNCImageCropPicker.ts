@@ -1,7 +1,7 @@
 import type { TurboModule } from "react-native/library/TurboModule/RCTExport";
 import { TurboModuleRegistry } from "react-native";
 
-export class OptionsCommon {
+export interface OptionsCommon {
     cropping?: boolean;
     width?: number;
     height?: number;
@@ -34,8 +34,39 @@ export class OptionsCommon {
     cropperRotateButtonsHidden?: boolean;
 }
 
+export type ErrorCode = 'camera_unavailable' | 'permission' | 'others';
+
+export class Asset {
+  localIdentifier?: string;
+  exif?: Exif;
+  cropRect?: CropRect;
+
+  duration?: string;
+  creationDate?: number;
+  modificationDate?: number;
+  sourceURL?: string;
+  filename?: string;
+  mime?: string;
+  path?: string;
+  size?: number;
+  height?: string;
+  width?: string;
+  data?: string;
+}
+
+class Exif {
+
+}
+
+class CropRect {
+
+}
+
 interface ResponseData {
-    path : string;
+  didCancel?: boolean;
+  errorCode?: ErrorCode;
+  errorMessage?: string;
+  assets?: Asset[];
 }
 
 export interface Spec extends TurboModule {
