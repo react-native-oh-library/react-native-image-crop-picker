@@ -89,20 +89,22 @@ export class AbilityResult {
 }
 
 
-export class ImageCropPickerTurboModule extends TurboModule interface TM.ImageCropPicker.Spec{
+export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageCropPicker.Spec{
 
   constructor(protected ctx: TurboModuleContext) {
     super(ctx);
   }
 
   isNullOrUndefined(value: any): boolean {
-    return value === null || value === undefined;
+    return value === null || value === undefined || value === '';
   }
 
   async openPicker(request?: RequestData): Promise<ResponseData> {
     Logger.info(TAG, 'into openPicker request' + JSON.stringify(request));
     results = { assets: []};
-    if (request.multiple && request.minFiles >= request.maxFiles) {
+    let minFiles = this.isNullOrUndefined(request?.minFiles) ? MinNumber : request.minFiles;
+    let maxFiles = this.isNullOrUndefined(request.maxFiles) ? MaxNumber : request.maxFiles;
+    if (request.multiple && minFiles > maxFiles) {
       results.errorMessage = 'minFiles number should be less than maxFiles number';
       return results;
     }
@@ -114,7 +116,7 @@ export class ImageCropPickerTurboModule extends TurboModule interface TM.ImageCr
     let multiple = this.isNullOrUndefined(request.multiple) ? false : request.multiple;
     let mediaType = request.mediaType == 'photo' ? 'FILTER_MEDIA_TYPE_IMAGE'
       : (request.mediaType == 'video' ? 'FILTER_MEDIA_TYPE_VIDEO' : 'FILTER_MEDIA_TYPE_ALL');
-    let maxFiles = this.isNullOrUndefined(request.maxFiles) ? MaxNumber : request.maxFiles;
+
     let writeTempFile = this.isNullOrUndefined(request.writeTempFile) ? true :request.writeTempFile;
     let qualityNumber = this.isNullOrUndefined(request.compressImageQuality) ? ImageQuality : request.compressImageQuality;
     let forceJpg = this.isNullOrUndefined(request.forceJpg) ? false : request.forceJpg;
@@ -198,16 +200,15 @@ export class ImageCropPickerTurboModule extends TurboModule interface TM.ImageCr
     for (let j = 0;j < images.length;j++) {
       imgObj = {};
       let value = images[j];
-      const mimeUri = value.substring(0, 4)
+      if (this.isNullOrUndefined(value)) {
+        return;
+      }
       let imageType;
-      let fileName;
-      if (mimeUri === 'file') {
-        let i = value.lastIndexOf('/')
-        fileName = value.substring(i + 1)
-        i = value.lastIndexOf('.')
-        if (i != -1) {
-          imageType = value.substring(i + 1)
-        }
+      let i = value.lastIndexOf('/')
+      let fileName = value.substring(i + 1)
+      i = value.lastIndexOf('.')
+      if (i != -1) {
+        imageType = value.substring(i + 1)
       }
       imgObj.sourceURL = sourceFilePaths[j];
       imgObj.path = value;
@@ -287,7 +288,9 @@ export class ImageCropPickerTurboModule extends TurboModule interface TM.ImageCr
     let base64Data;
     try {
       let file = fs.openSync(filePath, fs.OpenMode.READ_ONLY);
-      let buf = new ArrayBuffer(4096);
+      let stat = fs.lstatSync(filePath);
+      Logger.info(TAG, 'into imageToBase64 stat.size = ' + stat.size);
+      let buf = new ArrayBuffer(stat.size);
       fs.readSync(file.fd, buf);
       let unit8Array: Uint8Array = new Uint8Array(buf);
       let base64Helper = new util.Base64Helper();
