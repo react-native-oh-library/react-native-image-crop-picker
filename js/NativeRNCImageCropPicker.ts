@@ -1,80 +1,108 @@
 import type { TurboModule } from "react-native/library/TurboModule/RCTExport";
 import { TurboModuleRegistry } from "react-native";
 
-export interface OptionsCommon {
-    cropping?: boolean;
-    width?: number;
-    height?: number;
-    multiple?: boolean;
-    writeTempFile?: boolean;
-    includeBase64?: boolean;
-    includeExif?: boolean;
-    avoidEmptySpaceAroundImage?: boolean;
-    freeStyleCropEnabled?: boolean;
-    cropperToolbarTitle?: string;
-    cropperCircleOverlay?: boolean;
-    minFiles?: number;
-    maxFiles?: number;
-    useFrontCamera?: boolean;
-    compressVideoPreset?: string;
-    compressImageMaxWidth?: number;
-    compressImageMaxHeight?: number;
-    compressImageQuality?: number;
-    loadingLabelText?: string;
-    showsSelectedCount?: boolean;
-    forceJpg?: boolean;
-    showCropGuidelines?: boolean;
-    showCropFrame?: boolean;
-    hideBottomControls?: boolean;
-    enableRotationGesture?: boolean;
-    cropperChooseText?: boolean;
-    cropperChooseColor?: boolean;
-    cropperCancelText?: boolean;
-    cropperCancelColor?: boolean;
-    cropperRotateButtonsHidden?: boolean;
+type ImageOrVideo = Image | Video;
+type SmartAlbums = | 'Regular' | 'SyncedEvent' | 'SyncedFaces';
+type CompressVideoPresets = | 'LowQuality' | 'MediumQuality' | 'HighestQuality' | 'Passthrough';
+type Options = AnyOptions | VideoOptions | ImageOptions;
+type MediaType = 'photo' | 'video' | 'any';
+type AnyOptions = Omit<ImageOptions, 'mediaType'> & Omit<VideoOptions, 'mediaType'> & {
+  mediaType?: 'any';
+}
+type VideoOptions = CommonOptions & {
+  mediaType: 'video';
+  compressVideoPreset?: CompressVideoPresets;
 }
 
-export type ErrorCode = 'camera_unavailable' | 'permission' | 'others';
+type CropperOptions = ImageOptions & {
+  path: string;
+}
 
-export class Asset {
-  localIdentifier?: string;
+type ImageOptions = CommonOptions & {
+  mediaType: MediaType;
+  width?: number;
+  height?: number;
+  includeBase64?: boolean;
+  includeExif?: boolean;
+  forceJpg?: boolean;
+  cropping?: boolean;
+  avoidEmptySpaceAroundImage?: boolean;
+  cropperActiveWidgetColor?: string;
+  cropperStatusBarColor?: string;
+  cropperToolbarColor?: string;
+  cropperToolbarWidgetColor?: string;
+  cropperToolbarTitle?: string;
+  freeStyleCropEnabled?: boolean;
+  cropperTintColor?: string;
+  cropperCircleOverlay?: boolean;
+  cropperCancelText?: string;
+  cropperCancelColor?: string;
+  cropperChooseText?: string;
+  cropperChooseColor?: string;
+  cropperRotateButtonHidden?: boolean
+  showCropGuidelines?: boolean;
+  showCropFrame?: boolean;
+  enableRotationGesture?: boolean;
+  disableCropperColorSetters?: boolean;
+  compressImageMaxWidth?: number;
+  compressImageMaxHeight?: number;
+  compressImageQuality?: number;
+}
+
+export interface CommonOptions {
+  multiple?: boolean;
+  minFiles?: number;
+  maxFiles?: number;
+  waitAnimationEnd?: boolean;
+  smartAlbums?: SmartAlbums[];
+  useFrontCamera?: boolean;
+  loadingLabelText?: string;
+  showsSelectedCount?: boolean;
+  sortOrder?: 'none' | 'asc' | 'desc';
+  hideBottomControls?: boolean;
+  writeTempFile?: boolean;
+}
+
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface ImageVideoCommon {
+  path: string;
+  size: number;
+  width: number;
+  height: number;
+  mime: string;
   exif?: Exif;
-  cropRect?: CropRect;
-
-  duration?: string;
-  creationDate?: number;
-  modificationDate?: number;
+  localIdentifier?: string;
   sourceURL?: string;
   filename?: string;
-  mime?: string;
-  path?: string;
-  size?: number;
-  height?: string;
-  width?: string;
-  data?: string;
+  creationDate?: string;
+  modificationDate?: string;
 }
 
-class Exif {
+export interface Exif {
 
 }
 
-class CropRect {
-
+interface Image extends ImageVideoCommon {
+  data?: string | null;
+  cropRect?: CropRect | null;
 }
 
-interface ResponseData {
-  didCancel?: boolean;
-  errorCode?: ErrorCode;
-  errorMessage?: string;
-  assets?: Asset[];
+interface Video extends ImageVideoCommon {
+  duration: number | null;
 }
 
 export interface Spec extends TurboModule {
-    openPicker(options: OptionsCommon): Promise<ResponseData>;
-    openCamera(options: OptionsCommon): Promise<ResponseData>;
-    openCropper(options: OptionsCommon): Promise<ResponseData>;
-    clean(): Promise<void>;
-    cleanSingle(path: string): Promise<void>;
+  openPicker(options: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image[] | Image>;
+  openCamera(options: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image[] | Image>;
+  openCropper(options: CropperOptions): Promise<Image>;
+  clean(): Promise<void>;
+  cleanSingle(path: string): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('ImageCropPicker')
