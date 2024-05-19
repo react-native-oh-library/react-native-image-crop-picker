@@ -374,6 +374,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let useFrontCamera = this.isNullOrUndefined(options.useFrontCamera) ? false : options.useFrontCamera;
     let mediaType = options.mediaType == 'photo' ? [picker.PickerMediaType.PHOTO] : (options.mediaType == 'video'
       ? [picker.PickerMediaType.VIDEO] : [picker.PickerMediaType.PHOTO,picker.PickerMediaType.VIDEO]);
+    return new Promise(async(res, rej) => {
     try {
       let mContext = await this.ctx.uiAbilityContext;
       let pickerProfile: picker.PickerProfile = {
@@ -398,6 +399,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           imgResult.cropRect = imageInfo.cropRect;
           imgResult.creationDate = imageInfo.creationDate + '';
           imgResult.modificationDate = imageInfo.modificationDate + '';
+          res(isImg ? imgResult : videoResult);
         })
       } else {
         this.getFileInfo(false, imgOrVideoPath).then((imageInfo)=>{
@@ -413,13 +415,14 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           videoResult.creationDate = imageInfo.creationDate + '';
           videoResult.modificationDate = imageInfo.modificationDate + '';
           videoResult.duration = Number(imageInfo.duration);
+          res(isImg ? imgResult : videoResult);
         })
       }
     } catch (error) {
       let err = error as BusinessError;
-      Logger.info(TAG, 'into openCamera error: ' + JSON.stringify(err));
+      rej(isImg ? imgResult : videoResult);
     }
-    return isImg ? imgResult : videoResult;
+    })
   };
 
   imageToBase64(filePath: string): string {
@@ -570,8 +573,8 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
             result.cropRect = imageInfo.cropRect;
             result.creationDate = imageInfo.creationDate + '';
             result.modificationDate = imageInfo.modificationDate + '';
+            res(result);
           })
-          res(result);
         } );
       } catch (err) {
         Logger.info(TAG, 'into openCropper startAbility err: ' + JSON.stringify(err));
