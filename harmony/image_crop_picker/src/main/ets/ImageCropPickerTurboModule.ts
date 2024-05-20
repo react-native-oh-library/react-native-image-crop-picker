@@ -10,7 +10,6 @@ import picker from '@ohos.multimedia.cameraPicker';
 import camera from '@ohos.multimedia.camera';
 import { BusinessError } from '@ohos.base';
 import fs, { Filter } from '@ohos.file.fs';
-import { JSON } from '@kit.ArkTS';
 
 
 export type MediaType = 'photo' | 'video' | 'any';
@@ -23,178 +22,72 @@ const TAG : string = 'ImageCropPickerTurboModule';
 const WANT_PARAM_URI_SELECT_SINGLE: string = 'singleselect';
 const WANT_PARAM_URI_SELECT_MULTIPLE: string = 'multipleselect';
 const ENTER_GALLERY_ACTION: string = "ohos.want.action.photoPicker";
-const filePrefix = 'file://'
 
-let results : ImageOrVideo = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
-
+let results: ResponseData = { assets: []};
+let imgObj: Asset = {};
 let avMetadataExtractor: media.AVMetadataExtractor;
 
-type SmartAlbums = | 'Regular' | 'SyncedEvent' | 'SyncedFaces';
-type CompressVideoPresets = | 'LowQuality' | 'MediumQuality' | 'HighestQuality' | 'Passthrough';
-type CropperOptions = ImageOptions & {
-  path: string;
-}
-export type Options = AnyOptions | VideoOptions | ImageOptions;
-type AnyOptions = Omit<ImageOptions, 'mediaType'> & Omit<VideoOptions, 'mediaType'> & {
-  mediaType?: 'any';
-};
-type VideoOptions = CommonOptions & {
-  mediaType: 'video';
-  compressVideoPreset?: CompressVideoPresets;
-};
-type ImageOptions = CommonOptions & {
-  mediaType: MediaType;
+export class RequestData {
+  multiple?: boolean = false;
+  writeTempFile?: boolean = true;
+  includeBase64?: boolean = false;
+  useFrontCamera?: boolean = false;
+  forceJpg?: boolean = false;
+  minFiles?: number = MinNumber;
+  maxFiles?: number = MaxNumber;
+  mediaType?: MediaType = 'any';
+  compressImageQuality?: number;
+  path?: string;
   width?: number;
   height?: number;
-  includeBase64?: boolean;
-  includeExif?: boolean;
-  forceJpg?: boolean;
-  cropping?: boolean;
-  avoidEmptySpaceAroundImage?: boolean;
-  cropperActiveWidgetColor?: string;
-  cropperStatusBarColor?: string;
-  cropperToolbarColor?: string;
-  cropperToolbarWidgetColor?: string;
-  cropperToolbarTitle?: string;
-  freeStyleCropEnabled?: boolean;
-  cropperTintColor?: string;
-  cropperCircleOverlay?: boolean;
-  cropperCancelText?: string;
-  cropperCancelColor?: string;
-  cropperChooseText?: string;
-  cropperChooseColor?: string;
-  cropperRotateButtonsHidden?: boolean
-  showCropGuidelines?: boolean;
-  showCropFrame?: boolean;
-  enableRotationGesture?: boolean;
-  disableCropperColorSetters?: boolean;
-  compressImageMaxWidth?: number;
-  compressImageMaxHeight?: number;
-  compressImageQuality?: number;
-}
-
-export interface CommonOptions {
-  multiple?: boolean;
-  minFiles?: number;
-  maxFiles?: number;
-  waitAnimationEnd?: boolean;
-  smartAlbums?: SmartAlbums[];
-  useFrontCamera?: boolean;
-  loadingLabelText?: string;
-  showsSelectedCount?: boolean;
-  sortOrder?: 'none' | 'asc' | 'desc';
-  hideBottomControls?: boolean;
-  compressImageQuality?: number;
-  mediaType: MediaType;
-  width?: number;
-  height?: number;
-  includeBase64?: boolean;
-  includeExif?: boolean;
-  forceJpg?: boolean;
-  cropping?: boolean;
-  avoidEmptySpaceAroundImage?: boolean;
-  cropperActiveWidgetColor?: string;
-  cropperStatusBarColor?: string;
-  cropperToolbarColor?: string;
-  cropperToolbarWidgetColor?: string;
-  cropperToolbarTitle?: string;
-  freeStyleCropEnabled?: boolean;
-  cropperTintColor?: string;
-  cropperCircleOverlay?: boolean;
-  cropperCancelText?: string;
-  cropperCancelColor?: string;
-  cropperChooseText?: string;
-  cropperChooseColor?: string;
-  cropperRotateButtonsHidden?: boolean
-  showCropGuidelines?: boolean;
-  showCropFrame?: boolean;
-  enableRotationGesture?: boolean;
-  disableCropperColorSetters?: boolean;
-  compressImageMaxWidth?: number;
-  compressImageMaxHeight?: number;
-  writeTempFile?: boolean;
-}
-
-interface Image extends ImageVideoCommon {
-  data?: string | null;
-  cropRect?: CropRect | null;
-}
-
-interface Video extends ImageVideoCommon {
-  duration: number | null;
-}
-
-export interface CropRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-interface ImageOrVideo{
-  data?: string | null;
-  width?: number | null;
-  height?: number | null;
-  size?: number | null;
-  cropRect?: CropRect | null;
-  filename?: string | null;
-  path?: string | null;
-  exif?: Exif | null;
-  mime?: string | null;
-  sourceURL?: string | null;
-  creationDate?: string | null;
-  modificationDate?: string | null;
-  localIdentifier?: string | null;
-  duration?: string | null;
-}
-
-interface ImageVideoCommon {
-  path: string;
-  size: number;
-  width: number;
-  height: number;
-  mime: string;
-  exif?: Exif;
-  localIdentifier?: string;
-  sourceURL?: string;
-  filename?: string;
-  creationDate?: string;
-  modificationDate?: string;
-}
-
-export interface Exif {
 
 }
-
 export class FilePath{
   path?: string;
 }
+export class Asset {
+  localIdentifier?: string;
+  exif?: Exif;
+  cropRect?: CropRect;
 
-interface VideoImageInfo {
-  data?: string | null;
-  width?: number | null;
-  height?: number | null;
-  size?: number | null;
-  cropRect?: CropRect | null;
-  filename?: string | null;
-  path?: string | null;
-  exif?: Exif | null;
-  mime?: string | null;
-  sourceURL?: string | null;
-  creationDate?: number | null;
-  modificationDate?: number | null;
-  localIdentifier?: string | null;
-  duration?: string | null;
+  duration?: string;
+  creationDate?: number;
+  modificationDate?: number;
+  sourceURL?: string;
+  filename?: string;
+  mime?: string;
+  path?: string;
+  size?: number;
+  height?: string;
+  width?: string;
+  data?: string;
+}
+
+class Exif {
+
+}
+
+class CropRect {
+
+}
+
+interface ResponseData {
+  didCancel?: boolean;
+  errorCode?: ErrorCode;
+  errorMessage?: string;
+  assets?: Asset[];
 }
 
 interface FilePathResult {
   result?: FilePath[];
 }
 
+
 export class AbilityResult {
   resultCode: number;
   want?: Want;
 }
+
 
 export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageCropPicker.Spec{
 
@@ -206,24 +99,27 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     return value === null || value === undefined || value === '';
   }
 
-  async openPicker(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
-    Logger.info(TAG, 'into openPicker request' + JSON.stringify(options));
-    let minFiles = this.isNullOrUndefined(options?.minFiles) ? MinNumber : options.minFiles;
-    let maxFiles = this.isNullOrUndefined(options.maxFiles) ? MaxNumber : options.maxFiles;
-    if (options.multiple && minFiles > maxFiles) {
+  async openPicker(request?: RequestData): Promise<ResponseData> {
+    Logger.info(TAG, 'into openPicker request' + JSON.stringify(request));
+    results = { assets: []};
+    let minFiles = this.isNullOrUndefined(request?.minFiles) ? MinNumber : request.minFiles;
+    let maxFiles = this.isNullOrUndefined(request.maxFiles) ? MaxNumber : request.maxFiles;
+    if (request.multiple && minFiles > maxFiles) {
+      results.errorMessage = 'minFiles number should be less than maxFiles number';
       return results;
     }
-    let quality = options.compressImageQuality;
+    let quality = request.compressImageQuality;
     if (!this.isNullOrUndefined(quality) && !(quality >= 0 && quality <= 1)) {
+      results.errorMessage = 'compressImageQuality parameter error';
       return results;
     }
-    let multiple = this.isNullOrUndefined(options.multiple) ? false : options.multiple;
-    let mediaType = options.mediaType == 'photo' ? 'FILTER_MEDIA_TYPE_IMAGE'
-      : (options.mediaType == 'video' ? 'FILTER_MEDIA_TYPE_VIDEO' : 'FILTER_MEDIA_TYPE_ALL');
+    let multiple = this.isNullOrUndefined(request.multiple) ? false : request.multiple;
+    let mediaType = request.mediaType == 'photo' ? 'FILTER_MEDIA_TYPE_IMAGE'
+      : (request.mediaType == 'video' ? 'FILTER_MEDIA_TYPE_VIDEO' : 'FILTER_MEDIA_TYPE_ALL');
 
-    let writeTempFile = this.isNullOrUndefined(options.writeTempFile) ? true :options.writeTempFile;
-    let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
-    let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
+    let writeTempFile = this.isNullOrUndefined(request.writeTempFile) ? true :request.writeTempFile;
+    let qualityNumber = this.isNullOrUndefined(request.compressImageQuality) ? ImageQuality : request.compressImageQuality;
+    let forceJpg = this.isNullOrUndefined(request.forceJpg) ? false : request.forceJpg;
 
     let want : Want = {};
     if (multiple) {
@@ -251,6 +147,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     }
     let result: AbilityResult = await this.ctx.uiAbilityContext.startAbilityForResult(want as Want);
     if (result.resultCode == -1) {
+      results.didCancel = true;
       return results;
     }
     let sourceFilePaths: Array<string> = result.want.parameters['select-item-list'] as Array<string>;
@@ -262,7 +159,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
     }
     Logger.info(TAG, 'into openPicker tempFilePaths = '+ tempFilePaths.toString());
-    return this.getPickerResult(options, sourceFilePaths, tempFilePaths);
+    return this.getPickerResult(request, sourceFilePaths, tempFilePaths);
   }
 
   getTempFilePaths(images : Array<string>): Array<string> {
@@ -295,14 +192,13 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     return resultImages;
   }
 
-  async getPickerResult(options: Options, sourceFilePaths : Array<string>, tempFilePaths : Array<string>): Promise<ImageOrVideo[] | ImageOrVideo> {
+  async getPickerResult(request: RequestData, sourceFilePaths : Array<string>, tempFilePaths : Array<string>): Promise<ResponseData> {
     Logger.info(TAG, 'into openPickerResult :');
-    let resultsList: ImageOrVideo[] = [];
     let images = this.isNullOrUndefined(tempFilePaths) ? sourceFilePaths : tempFilePaths;
     Logger.info(TAG, 'into openPickerResult : images = '+ images);
-    let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
+    let includeBase64 = this.isNullOrUndefined(request.includeBase64) ? false : request.includeBase64;
     for (let j = 0;j < images.length;j++) {
-      results = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null}
+      imgObj = {};
       let value = images[j];
       if (this.isNullOrUndefined(value)) {
         return;
@@ -314,67 +210,63 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       if (i != -1) {
         imageType = value.substring(i + 1)
       }
-      results.sourceURL = sourceFilePaths[j];
-      results.filename = fileName;
+      imgObj.sourceURL = sourceFilePaths[j];
+      imgObj.path = value;
+      imgObj.filename = fileName;
 
       let file = fs.openSync(value, fs.OpenMode.READ_ONLY)
       Logger.info(TAG, 'into openSync : file.fd = '+ file.fd + ' file.path = ' + file.path + ' file.name = ' + file.name);
       let stat = fs.statSync(file.fd);
       let length = stat.size;
-      results.size = length;
-      results.creationDate = stat.ctime + '';
-      results.modificationDate = stat.mtime+ '';
+      imgObj.size = length;
+      imgObj.creationDate = stat.ctime;
+      imgObj.modificationDate = stat.mtime;
       if (this.isImage(value)) {
-        results.path = filePrefix + value;
-        results.data = includeBase64 ? this.imageToBase64(value) : '';
-        results.mime = 'image/' + imageType;
+        imgObj.data = includeBase64 ? this.imageToBase64(value) : '';
+        imgObj.mime = 'image/' + imageType;
         Logger.info(TAG, 'into openPickerResult value :' + value);
         let imageIS = image.createImageSource(file.fd)
         let imagePM = await imageIS.createPixelMap()
         Logger.info(TAG, 'end createImageSource : imageIS = ' + imageIS + ' imagePM = '+ imagePM);
         let imgInfo = await imagePM.getImageInfo();
-        results.height = imgInfo.size.height;
-        results.width = imgInfo.size.width;
+        imgObj.height = imgInfo.size.height + '';
+        imgObj.width = imgInfo.size.width + '';
         imagePM.release().then(() => {
           imagePM = undefined;
         })
         imageIS.release().then(() => {
           imageIS = undefined;
         })
-        results.duration = null;
+        imgObj.duration = '';
       } else {
         Logger.info(TAG, 'into getPickerResult video start');
-        results.data = null;
-        results.path = '';
-        results.mime = 'video/' + imageType;
+        imgObj.data = '';
+        imgObj.mime = 'video/' + imageType;
         let url = 'fd://' + file.fd;
         Logger.info(TAG, 'start avPlayer url:' + url);
         avMetadataExtractor = await media.createAVMetadataExtractor();
         avMetadataExtractor.fdSrc = { fd: file.fd, offset: 0, length: length };
         try {
           const res = await avMetadataExtractor.fetchMetadata();
-          results.duration = res.duration;
-          results.width = Number(res.videoWidth);
-          results.height = Number(res.videoHeight);
+          imgObj.duration = res.duration;
+          imgObj.width = res.videoWidth;
+          imgObj.height = res.videoHeight;
         } catch (error) {
           Logger.error(TAG, 'get video info suc error:' + error);
         }
       }
-      resultsList.push(results);
       fs.closeSync(file);
+      results.assets.push(imgObj);
     }
-    return options.multiple ? resultsList : results;
+    return results;
   }
 
-  async openCamera(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
-    Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(options));
-    let isImg = false;
-    let imgResult: Image = {data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
-    let videoResult: Video = {duration:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
-    let useFrontCamera = this.isNullOrUndefined(options.useFrontCamera) ? false : options.useFrontCamera;
-    let mediaType = options.mediaType == 'photo' ? [picker.PickerMediaType.PHOTO] : (options.mediaType == 'video'
+  async openCamera(request?: RequestData): Promise<ResponseData> {
+    Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(request));
+    let results: ResponseData = { assets: []};
+    let useFrontCamera = this.isNullOrUndefined(request.useFrontCamera) ? false : request.useFrontCamera;
+    let mediaType = request.mediaType == 'photo' ? [picker.PickerMediaType.PHOTO] : (request.mediaType == 'video'
       ? [picker.PickerMediaType.VIDEO] : [picker.PickerMediaType.PHOTO,picker.PickerMediaType.VIDEO]);
-    return new Promise(async(res, rej) => {
     try {
       let mContext = await this.ctx.uiAbilityContext;
       let pickerProfile: picker.PickerProfile = {
@@ -382,47 +274,13 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       };
       let pickerResult: picker.PickerResult = await picker.pick(mContext, mediaType, pickerProfile);
       Logger.info(TAG, 'into openCamera results: ' + JSON.stringify(pickerResult));
-      let imgOrVideoPath = pickerResult.resultUri;
-      isImg = this.isImage(imgOrVideoPath);
-      if (isImg) {
-        this.getFileInfo(false, imgOrVideoPath).then((imageInfo)=>{
-          imageInfo.sourceURL = imgOrVideoPath;
-          imgResult.path = '';
-          imgResult.exif = imageInfo.exif;
-          imgResult.data = imageInfo.data;
-          imgResult.size = imageInfo.size;
-          imgResult.width = imageInfo.width;
-          imgResult.height = imageInfo.height;
-          imgResult.filename = imageInfo.filename;
-          imgResult.mime = imageInfo.mime;
-          imgResult.localIdentifier = imageInfo.localIdentifier;
-          imgResult.cropRect = imageInfo.cropRect;
-          imgResult.creationDate = imageInfo.creationDate + '';
-          imgResult.modificationDate = imageInfo.modificationDate + '';
-          res(isImg ? imgResult : videoResult);
-        })
-      } else {
-        this.getFileInfo(false, imgOrVideoPath).then((imageInfo)=>{
-          videoResult.sourceURL = imgOrVideoPath;
-          videoResult.path = '';
-          videoResult.exif = imageInfo.exif;
-          videoResult.size = imageInfo.size;
-          videoResult.width = imageInfo.width;
-          videoResult.height = imageInfo.height;
-          videoResult.filename = imageInfo.filename;
-          videoResult.mime = imageInfo.mime;
-          videoResult.localIdentifier = imageInfo.localIdentifier;
-          videoResult.creationDate = imageInfo.creationDate + '';
-          videoResult.modificationDate = imageInfo.modificationDate + '';
-          videoResult.duration = Number(imageInfo.duration);
-          res(isImg ? imgResult : videoResult);
-        })
-      }
+      imgObj.sourceURL = pickerResult.resultUri;
+      results.assets.push(imgObj);
     } catch (error) {
       let err = error as BusinessError;
-      rej(isImg ? imgResult : videoResult);
+      Logger.info(TAG, 'into openCamera error: ' + JSON.stringify(err));
     }
-    })
+    return results;
   };
 
   imageToBase64(filePath: string): string {
@@ -541,12 +399,12 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     });
   }
 
-  async openCropper(options?: CropperOptions): Promise<Image>{
-    Logger.info(TAG, 'into openCropper : ' + JSON.stringify(options));
-    let result: Image = {data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
-    let uri = options.path;
+  async openCropper(request?: RequestData): Promise<ResponseData>{
     return new Promise((res, rej) => {
+      let results: ResponseData = { assets: []};
+      Logger.info(TAG, 'into openCropper request: ' + JSON.stringify(request));
       let bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
+      let uri = request.path;
       try {
         let want: Want = {
           "bundleName": bundleName,
@@ -557,80 +415,16 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         }
         this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
           let imgPath = AppStorage.get('cropImagePath') as string;
+          imgObj.sourceURL = imgPath;
+          results.assets.push(imgObj);
           AppStorage.setOrCreate('cropImagePath', '')
           Logger.info(TAG, 'into openCropper startAbility suc : ' + imgPath);
-          this.getFileInfo(options?.includeBase64, imgPath).then((imageInfo) =>{
-            result.path = filePrefix + imgPath;
-            result.exif = imageInfo.exif;
-            result.sourceURL = uri;
-            result.data = imageInfo.data;
-            result.size = imageInfo.size;
-            result.width = imageInfo.width;
-            result.height = imageInfo.height;
-            result.filename = imageInfo.filename;
-            result.mime = imageInfo.mime;
-            result.localIdentifier = imageInfo.localIdentifier;
-            result.cropRect = imageInfo.cropRect;
-            result.creationDate = imageInfo.creationDate + '';
-            result.modificationDate = imageInfo.modificationDate + '';
-            res(result);
-          })
+          res(results);
         } );
       } catch (err) {
         Logger.info(TAG, 'into openCropper startAbility err: ' + JSON.stringify(err));
-        rej(result)
+        rej(results)
       }
     })
-  }
-
-  async getFileInfo(includeBase64: boolean, filePath: string) : Promise<VideoImageInfo>{
-    let videoImageInfo : VideoImageInfo = {duration: null};
-    let imageType;
-    let i = filePath.lastIndexOf('/')
-    let fileName = filePath.substring(i + 1)
-    i = filePath.lastIndexOf('.')
-    if (i != -1) {
-      imageType = filePath.substring(i + 1)
-    }
-    videoImageInfo.path = filePrefix + filePath;
-    videoImageInfo.filename = fileName;
-    videoImageInfo.mime = 'image/' + imageType;
-
-    let file = fs.openSync(filePath, fs.OpenMode.READ_ONLY)
-    let stat = fs.statSync(file.fd);
-    let length = stat.size;
-    videoImageInfo.size = length;
-    videoImageInfo.creationDate = stat.ctime;
-    videoImageInfo.modificationDate = stat.mtime;
-    if (this.isImage(filePath)) {
-      let imageIS = image.createImageSource(file.fd)
-      let imagePM = await imageIS.createPixelMap()
-      let imgInfo = await imagePM.getImageInfo();
-      videoImageInfo.data = includeBase64 ? this.imageToBase64(filePath) : null;
-      videoImageInfo.height = imgInfo.size.height;
-      videoImageInfo.width = imgInfo.size.width;
-      imagePM.release().then(() => {
-        imagePM = undefined;
-      })
-      imageIS.release().then(() => {
-        imageIS = undefined;
-      })
-    } else {
-      videoImageInfo.mime = 'video/' + imageType;
-      let url = 'fd://' + file.fd;
-      Logger.info(TAG, 'start avPlayer url:' + url);
-      avMetadataExtractor = await media.createAVMetadataExtractor();
-      avMetadataExtractor.fdSrc = { fd: file.fd, offset: 0, length: length };
-      try {
-        const res = await avMetadataExtractor.fetchMetadata();
-        videoImageInfo.duration = res.duration;
-        videoImageInfo.width = Number(res.videoWidth);
-        videoImageInfo.height = Number(res.videoHeight);
-      } catch (error) {
-        Logger.error(TAG, 'get video info suc error:' + error);
-      }
-    }
-    fs.close(file.fd);
-    return videoImageInfo;
   }
 }
