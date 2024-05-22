@@ -86,15 +86,16 @@ function textStyle() {
 @Component
 export struct ImageEditInfo {
 
-  @State filePath:string = '';
+  @State filePath:string = AppStorage.get('filePath') as string;
+  @State cropperRotate:string = AppStorage.get('cropperRotate') as string;
   setting: RenderingContextSettings = new RenderingContextSettings(true);
   context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.setting);
   @Provide('isPixelMapChange') @Watch('flushPixelMap') isPixelMapChange: boolean = false;
-  @State title: string = '编辑图片';
-  @State cancel: string = 'Cancel';
-  @State cancelTextColor: string = '#0000FF';
-  @State choose: string = 'Choose';
-  @State chooseTextColor: string = '#FFCC00';
+  @State title: string = AppStorage.get('title') as string;
+  @State cancel: string = AppStorage.get('cancelText') as string;
+  @State cancelTextColor: string = AppStorage.get('cancelTextColor') as string;
+  @State choose: string = AppStorage.get('chooseText') as string;
+  @State chooseTextColor: string = AppStorage.get('chooseTextColor') as string;
   @State uri: string = '';
   @State icon?: image.PixelMap = undefined;
   @State imageWith: number = 0;
@@ -171,6 +172,14 @@ export struct ImageEditInfo {
 
   aboutToAppear() {
     this.pixelInit(this.filePath);
+    let arrayData = ['filePath', 'title', 'chooseText', 'chooseTextColor', 'cancelText', 'cancelTextColor', 'cropperRotate'];
+    this.initData(arrayData);
+  }
+
+  initData(arrayData : Array<string>) {
+    for (let i = 0; i < arrayData.length; i++) {
+      AppStorage.setOrCreate(arrayData[i], '');
+    }
   }
 
   @Builder
@@ -219,12 +228,6 @@ export struct ImageEditInfo {
         .width(this.display.width())
         .position({x:this.display.left,y:this.clipSize.bottom})
         .backgroundColor(this.DEFAULT_MASK_STYLE)
-
-      Row()
-        .height(this.clipSize.height())
-        .width(this.clipSize.width())
-        .position({x:this.clipSize.left,y:this.clipSize.top})
-        .border({ width: { top: 3, left: 3, right: 3, bottom: 3}, color: { top: Color.Red, left: Color.Red, right: Color.Red, bottom: Color.Red } })
 
       RectangleSizer({
         clipSize: this.clipSize,
@@ -281,6 +284,7 @@ export struct ImageEditInfo {
       Row() {
         Image($r('app.media.ic_anti_clockwise'))
           .iconStyle()
+          .visibility(this.cropperRotate === 'true' ? Visibility.Hidden : Visibility.Visible)
           .onClick(async () => {
             this.rotateImage(RotateType.ANTI_CLOCK);
           });
@@ -297,6 +301,7 @@ export struct ImageEditInfo {
       Row() {
         Image($r('app.media.ic_clockwise'))
           .iconStyle()
+          .visibility(this.cropperRotate === 'true' ? Visibility.Hidden : Visibility.Visible)
           .onClick(() => {
             this.rotateImage(RotateType.CLOCKWISE);
           });
@@ -384,6 +389,83 @@ export struct ImageEditInfo {
     this.dragObj = new DragObj(true, event.touches[0].screenX, event.touches[0].screenY, action, downPos, multiCrop);
   }
 
+  private endImageDrag(): void {
+    let crop: Rectangle = new Rectangle(this.clipSize.left, this.clipSize.top, this.clipSize.right, this.clipSize.bottom);
+
+    // 裁剪框和图片间的偏移量
+    let extraLeft = 0;
+    let extraTop = 0;
+    let extraRight = 0;
+    let extraBottom = 0;
+
+    // 图片实际的宽高
+    let actualHeight = 0;
+    let actualWidth = 0;
+
+    // 图片偏移量
+    let imgOffSetX = this.imgOffSetX;
+    let imgOffSetY = this.imgOffSetY;
+
+    // 图片缩放偏移量
+    let scaleOffsetX = 0;
+    let scaleOffsetY = 0;
+
+    // 根据图片宽高比计算实际的图片宽高和偏移量
+    // 计算图片的实际宽高和实际偏移量
+    if (this.imageWith > this.imageHeight) {
+      actualHeight = Math.round(this.imageHeight / (this.imageWith / (this.screenWidth - hotspotsWidth * 2) ));
+      actualWidth = (this.screenHeight / 2 - actualHeight / 2);
+      extraLeft = hotspotsWidth;
+      extraTop = actualWidth - 56;
+      extraRight = this.screenWidth - hotspotsWidth;
+      extraBottom = actualHeight + extraTop;
+    } else {
+      actualHeight = (this.screenHeight - 56 * 2 - hotspotsWidth * 2);
+      actualWidth = Math.round(this.imageWith / (this.imageHeight / actualHeight));
+      extraLeft = this.screenWidth / 2 - actualWidth / 2;
+      extraTop = hotspotsWidth;
+      extraRight = actualWidth + extraLeft;
+      extraBottom = actualHeight + hotspotsWidth;
+    }
+
+    // 计算缩放偏移量
+    scaleOffsetX = this.imgScale > 1 ? 0- ((extraRight - extraLeft) * this.imgScale - (extraRight - extraLeft)) / 2 : 0;
+    scaleOffsetY = this.imgScale > 1 ? 0- ((extraBottom - extraTop) * this.imgScale - (extraBottom - extraTop)) / 2 : 0;
+
+    // 计算图片四个边缘的位置
+    const imageRight = this.imgOffSetX + actualWidth;
+    const imageBottom = this.imgOffSetY + actualHeight;
+
+    // 计算裁剪框四个边缘的位置
+    const cropRight = crop.right;
+    const cropBottom = crop.bottom;
+
+    // 判断图片左边缘是否在裁剪框内
+    if (this.imgOffSetX + scaleOffsetX > crop.left - extraLeft) {
+      // 图片左边缘已经被拖动到裁剪框内，需要还原位置
+      imgOffSetX = crop.left - extraLeft - scaleOffsetX;
+    }
+
+    // 判断图片上边缘是否在裁剪框内
+    if (this.imgOffSetY + scaleOffsetY > crop.top - extraTop) {
+      // 图片上边缘已经被拖动到裁剪框内，需要还原位置
+      imgOffSetY = crop.top - extraTop - scaleOffsetY;
+    }
+
+    // 判断图片右边缘是否在裁剪框内
+    if (imageRight - scaleOffsetX < cropRight - extraLeft) {
+      imgOffSetX = cropRight - extraRight + scaleOffsetX;
+    }
+
+    // 判断图片下边缘是否在裁剪框内
+    if (imageBottom - scaleOffsetY < cropBottom - extraTop) {
+      // 图片下边缘已经被拖动到裁剪框内，需要还原位置
+      imgOffSetY = cropBottom - extraBottom + scaleOffsetY;
+    }
+    this.imgOffSetX = imgOffSetX;
+    this.imgOffSetY = imgOffSetY;
+  }
+
   touchHandler: (event: TouchEvent | undefined) => void = (event: TouchEvent | undefined) : void => {
     if (!event) {
       return;
@@ -391,6 +473,7 @@ export struct ImageEditInfo {
 
     if (event.type === TouchType.Up) {
       this.dragObj.dragging = false;
+      this.endImageDrag();
     }
 
     if (event.type === TouchType.Down) {
@@ -577,6 +660,8 @@ export struct RectangleSizer {
   @State isScrolling: boolean = false;
   @State isTouched: boolean = false;
   @Prop hasSplitLine: boolean = true;
+  @State showCropFrame: boolean = AppStorage.get('showCropFrame') as boolean;
+  @State showCropGuidelines: boolean = AppStorage.get('showCropGuidelines') as boolean;
   @Prop isScreenPortrait: boolean = false;
 
   build() {
@@ -593,6 +678,7 @@ export struct RectangleSizer {
         Row().rowStyle2(this.isScrolling).id('petalClip_frostedGlass_row_81_6')
         Row().rowStyle().id('petalClip_frostedGlass_bottom')
       }
+      .visibility(this.showCropGuidelines ? Visibility.Visible : Visibility.Hidden)
       .padding(hotspotsWidth)
 
       Flex({ direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
@@ -611,6 +697,7 @@ export struct RectangleSizer {
         Column().columnStyle2(this.isScrolling).id('petalClip_frostedGlass_column_81_6')
         Column().columnStyle().id('petalClip_frostedGlass_right')
       }
+      .visibility(this.showCropGuidelines ? Visibility.Visible : Visibility.Hidden)
       .padding(hotspotsWidth)
 
       Flex({ direction: FlexDirection.Column, justifyContent: FlexAlign.SpaceBetween }) {
@@ -665,6 +752,7 @@ export struct RectangleSizer {
             .id('petalClip_frostedGlass_rect_rightBottom')
         }
       }
+      .visibility(this.showCropFrame ? Visibility.Visible : Visibility.Hidden)
       .padding(12)
     }
     .width(this.clipSize.width() + hotspotsWidth * 2)

@@ -11,6 +11,7 @@ import camera from '@ohos.multimedia.camera';
 import { BusinessError } from '@ohos.base';
 import fs, { Filter } from '@ohos.file.fs';
 import { JSON } from '@kit.ArkTS';
+import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 
 
 export type MediaType = 'photo' | 'video' | 'any';
@@ -24,25 +25,26 @@ const WANT_PARAM_URI_SELECT_SINGLE: string = 'singleselect';
 const WANT_PARAM_URI_SELECT_MULTIPLE: string = 'multipleselect';
 const ENTER_GALLERY_ACTION: string = "ohos.want.action.photoPicker";
 const filePrefix = 'file://'
+const atManager = abilityAccessCtrl.createAtManager();
 
 let results : ImageOrVideo = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
 
 let avMetadataExtractor: media.AVMetadataExtractor;
 
-type SmartAlbums = | 'Regular' | 'SyncedEvent' | 'SyncedFaces';
-type CompressVideoPresets = | 'LowQuality' | 'MediumQuality' | 'HighestQuality' | 'Passthrough';
-type CropperOptions = ImageOptions & {
+export type SmartAlbums = | 'Regular' | 'SyncedEvent' | 'SyncedFaces';
+export type CompressVideoPresets = | 'LowQuality' | 'MediumQuality' | 'HighestQuality' | 'Passthrough';
+export type CropperOptions = ImageOptions & {
   path: string;
 }
 export type Options = AnyOptions | VideoOptions | ImageOptions;
-type AnyOptions = Omit<ImageOptions, 'mediaType'> & Omit<VideoOptions, 'mediaType'> & {
+export type AnyOptions = Omit<ImageOptions, 'mediaType'> & Omit<VideoOptions, 'mediaType'> & {
   mediaType?: 'any';
 };
-type VideoOptions = CommonOptions & {
+export type VideoOptions = CommonOptions & {
   mediaType: 'video';
   compressVideoPreset?: CompressVideoPresets;
 };
-type ImageOptions = CommonOptions & {
+export type ImageOptions = CommonOptions & {
   mediaType: MediaType;
   width?: number;
   height?: number;
@@ -115,12 +117,12 @@ export interface CommonOptions {
   writeTempFile?: boolean;
 }
 
-interface Image extends ImageVideoCommon {
+export interface Image extends ImageVideoCommon {
   data?: string | null;
   cropRect?: CropRect | null;
 }
 
-interface Video extends ImageVideoCommon {
+export interface Video extends ImageVideoCommon {
   duration: number | null;
 }
 
@@ -131,7 +133,7 @@ export interface CropRect {
   height: number;
 }
 
-interface ImageOrVideo{
+export interface ImageOrVideo{
   data?: string | null;
   width?: number | null;
   height?: number | null;
@@ -148,7 +150,7 @@ interface ImageOrVideo{
   duration?: string | null;
 }
 
-interface ImageVideoCommon {
+export interface ImageVideoCommon {
   path: string;
   size: number;
   width: number;
@@ -170,7 +172,7 @@ export class FilePath{
   path?: string;
 }
 
-interface VideoImageInfo {
+export interface VideoImageInfo {
   data?: string | null;
   width?: number | null;
   height?: number | null;
@@ -187,7 +189,7 @@ interface VideoImageInfo {
   duration?: string | null;
 }
 
-interface FilePathResult {
+export interface FilePathResult {
   result?: FilePath[];
 }
 
@@ -209,7 +211,8 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async openPicker(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
     Logger.info(TAG, 'into openPicker request' + JSON.stringify(options));
     let minFiles = this.isNullOrUndefined(options?.minFiles) ? MinNumber : options.minFiles;
-    let maxFiles = this.isNullOrUndefined(options.maxFiles) ? MaxNumber : options.maxFiles;
+    let maxFiles = this.isNullOrUndefined(options?.maxFiles) ? MaxNumber : options.maxFiles;
+    let isShowSerialNum = this.isNullOrUndefined(options?.showsSelectedCount) ? true : options?.showsSelectedCount;
     if (options.multiple && minFiles > maxFiles) {
       return results;
     }
@@ -234,7 +237,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           uri: WANT_PARAM_URI_SELECT_MULTIPLE,
           filterMediaType: mediaType,
           maxSelectCount: maxFiles,
-          isShowSerialNum: true,
+          isShowSerialNum: isShowSerialNum,
         },
         "entities": []
       }
@@ -379,7 +382,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       isImg = this.isImage(imgOrVideoPath);
       if (isImg) {
         this.getFileInfo(false, imgOrVideoPath).then((imageInfo)=>{
-          imageInfo.sourceURL = imgOrVideoPath;
+          imgResult.sourceURL = imgOrVideoPath;
           imgResult.path = '';
           imgResult.exif = imageInfo.exif;
           imgResult.data = imageInfo.data;
@@ -392,7 +395,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           imgResult.cropRect = imageInfo.cropRect;
           imgResult.creationDate = imageInfo.creationDate + '';
           imgResult.modificationDate = imageInfo.modificationDate + '';
-          res(isImg ? imgResult : videoResult);
+          res(imgResult);
         })
       } else {
         this.getFileInfo(false, imgOrVideoPath).then((imageInfo)=>{
@@ -408,7 +411,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           videoResult.creationDate = imageInfo.creationDate + '';
           videoResult.modificationDate = imageInfo.modificationDate + '';
           videoResult.duration = Number(imageInfo.duration);
-          res(isImg ? imgResult : videoResult);
+          res(videoResult);
         })
       }
     } catch (error) {
@@ -537,42 +540,69 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async openCropper(options?: CropperOptions): Promise<Image>{
     Logger.info(TAG, 'into openCropper : ' + JSON.stringify(options));
     let result: Image = {data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
-    let uri = options.path;
+    const permissions: Array<Permissions> = [
+      'ohos.permission.READ_MEDIA',
+      'ohos.permission.WRITE_MEDIA',
+      'ohos.permission.MEDIA_LOCATION',
+    ];
     return new Promise((res, rej) => {
-      let bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
-      try {
-        let want: Want = {
-          "bundleName": bundleName,
-          "abilityName": "ImageEditAbility",
-          parameters: {
-            'imageUri': uri,
+      atManager.requestPermissionsFromUser(this.ctx.uiAbilityContext, permissions, (err, data) => {
+        if (!err) {
+          Logger.error(TAG,'Failed in requestPermission')
+          rej('Failed in requestPermission')
+        } else {
+          Logger.info(TAG,'Succeeded in requestPermission')
+          let title : string = this.isNullOrUndefined(options?.cropperToolbarTitle) ? '编辑图片' : options?.cropperToolbarTitle;
+          let chooseText : string = this.isNullOrUndefined(options?.cropperChooseText) ? 'Choose' : options?.cropperChooseText;
+          let chooseTextColor : string = this.isNullOrUndefined(options?.cropperChooseColor) ? '#FFCC00' : options?.cropperChooseColor;
+          let cancelText : string = this.isNullOrUndefined(options?.cropperCancelText) ? 'Cancel' : options?.cropperCancelText;
+          let cancelTextColor : string = this.isNullOrUndefined(options?.cropperCancelColor) ? '#0000FF' : options?.cropperCancelColor;
+          let showCropGuidelines : boolean = this.isNullOrUndefined(options?.showCropGuidelines) ? true : options?.showCropGuidelines;
+          let showCropFrame : boolean = this.isNullOrUndefined(options?.showCropFrame) ? true : options?.showCropFrame;
+          let cropperRotate : string = options?.cropperRotateButtonsHidden + '';
+          AppStorage.setOrCreate('title', title);
+          AppStorage.setOrCreate('chooseText', chooseText);
+          AppStorage.setOrCreate('chooseTextColor', chooseTextColor);
+          AppStorage.setOrCreate('cancelText', cancelText);
+          AppStorage.setOrCreate('cancelTextColor', cancelTextColor);
+          AppStorage.setOrCreate('cropperRotate', cropperRotate);
+          AppStorage.setOrCreate('showCropGuidelines', showCropGuidelines);
+          AppStorage.setOrCreate('showCropFrame', showCropFrame);
+          let uri = options.path;
+          AppStorage.setOrCreate('filePath', uri);
+          let bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
+          try {
+            let want: Want = {
+              "bundleName": bundleName,
+              "abilityName": "ImageEditAbility",
+            }
+            this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
+              let imgPath = AppStorage.get('cropImagePath') as string;
+              AppStorage.setOrCreate('cropImagePath', '')
+              Logger.info(TAG, 'into openCropper startAbility suc : ' + imgPath);
+              this.getFileInfo(options?.includeBase64, imgPath).then((imageInfo) =>{
+                result.path = filePrefix + imgPath;
+                result.exif = imageInfo.exif;
+                result.sourceURL = uri;
+                result.data = imageInfo.data;
+                result.size = imageInfo.size;
+                result.width = imageInfo.width;
+                result.height = imageInfo.height;
+                result.filename = imageInfo.filename;
+                result.mime = imageInfo.mime;
+                result.localIdentifier = imageInfo.localIdentifier;
+                result.cropRect = imageInfo.cropRect;
+                result.creationDate = imageInfo.creationDate + '';
+                result.modificationDate = imageInfo.modificationDate + '';
+                res(result);
+              })
+            } );
+          } catch (err) {
+            Logger.info(TAG, 'into openCropper startAbility err: ' + JSON.stringify(err));
+            rej(result)
           }
         }
-        this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
-          let imgPath = AppStorage.get('cropImagePath') as string;
-          AppStorage.setOrCreate('cropImagePath', '')
-          Logger.info(TAG, 'into openCropper startAbility suc : ' + imgPath);
-          this.getFileInfo(options?.includeBase64, imgPath).then((imageInfo) =>{
-            result.path = filePrefix + imgPath;
-            result.exif = imageInfo.exif;
-            result.sourceURL = uri;
-            result.data = imageInfo.data;
-            result.size = imageInfo.size;
-            result.width = imageInfo.width;
-            result.height = imageInfo.height;
-            result.filename = imageInfo.filename;
-            result.mime = imageInfo.mime;
-            result.localIdentifier = imageInfo.localIdentifier;
-            result.cropRect = imageInfo.cropRect;
-            result.creationDate = imageInfo.creationDate + '';
-            result.modificationDate = imageInfo.modificationDate + '';
-            res(result);
-          })
-        } );
-      } catch (err) {
-        Logger.info(TAG, 'into openCropper startAbility err: ' + JSON.stringify(err));
-        rej(result)
-      }
+      });
     })
   }
 
