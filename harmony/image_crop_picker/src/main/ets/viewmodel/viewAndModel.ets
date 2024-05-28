@@ -17,18 +17,6 @@ export class IconStatus {
   }
 }
 
-export const menuIconList: Array<IconStatus> = [
-  new IconStatus($r('app.media.ic_crop'), $r('app.media.ic_crop_filled')),
-  new IconStatus($r('app.media.ic_rotate'), $r('app.media.ic_rotate_filled')),
-]
-
-export const cropIconChangeList: Array<IconStatus> = [
-  new IconStatus($r('app.media.ic_original'), $r('app.media.ic_original_filled')),
-  new IconStatus($r('app.media.ic_one2one'), $r('app.media.ic_one2one_filled')),
-  new IconStatus($r('app.media.ic_four2three'), $r('app.media.ic_four2three_filled')),
-  new IconStatus($r('app.media.ic_sixteen2nine'), $r('app.media.ic_sixteen2nine_filled'))
-]
-
 export enum CropType {
   ORIGINAL_IMAGE,
   SQUARE,

@@ -7,21 +7,6 @@ import mediaLibrary from '@ohos.multimedia.mediaLibrary';
 const TAG: string = 'imageCrop_Decode_Encode';
 
 /**
- * Async get resource fd.
- *
- * @return file fd.
- */
-async function getResourceFd(pageContent: Object) {
-  const context = getContext(pageContent);
-  const resourceMgr = context.resourceManager;
-  let imageBuffer = await resourceMgr.getMediaContent($r('app.media.ic_low'));
-  let filePath = context.cacheDir + '/' + 'low.jpg';
-  let file = fs.openSync(filePath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
-  fs.writeSync(file.fd, imageBuffer.buffer);
-  return file.fd;
-}
-
-/**
  * Async create pixel map.
  *
  * @return pixelMa.
