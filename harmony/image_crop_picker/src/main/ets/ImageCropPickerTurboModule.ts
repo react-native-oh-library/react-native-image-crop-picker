@@ -12,6 +12,7 @@ import { BusinessError } from '@ohos.base';
 import fs, { Filter } from '@ohos.file.fs';
 import { JSON } from '@kit.ArkTS';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
+import { PermissionRequestResult } from '@ohos.abilityAccessCtrl';
 
 
 export type MediaType = 'photo' | 'video' | 'any';
@@ -19,7 +20,7 @@ export type OrderType = 'asc' | 'desc' | 'none';
 export type ErrorCode = 'camera_unavailable' | 'permission' | 'others';
 const MaxNumber = 5;
 const MinNumber = 1;
-const ImageQuality = -1;
+const ImageQuality = 1;
 const TAG : string = 'ImageCropPickerTurboModule';
 const WANT_PARAM_URI_SELECT_SINGLE: string = 'singleselect';
 const WANT_PARAM_URI_SELECT_MULTIPLE: string = 'multipleselect';
@@ -163,7 +164,19 @@ export interface ImageVideoCommon {
 }
 
 export interface Exif {
-
+  BitsPerSample?: string;
+  Orientation?: string;
+  ImageLength?: string;
+  ImageWidth?: string;
+  GPSLatitude?: string;
+  GPSLongitude?: string;
+  GPSLatitudeRef?: string;
+  GPSLongitudeRef?: string;
+  DateTimeOriginal?: string;
+  ExposureTime?: string;
+  SceneType?: string;
+  ISOSpeedRatings?: string;
+  FNumber?: string;
 }
 
 export class FilePath{
@@ -263,7 +276,8 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let sourceFilePaths: Array<string> = result.want.parameters['select-item-list'] as Array<string>;
     let tempFilePaths = null;
     Logger.info(TAG, 'into openPicker tempFilePaths = '+ qualityNumber + ' ' + forceJpg);
-    if (!(qualityNumber == -1 && !forceJpg)) {
+    if (qualityNumber !== 1 || forceJpg) {
+      Logger.info(TAG, 'qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
       tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
     } else {
       tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
@@ -299,6 +313,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async getPickerResult(options: Options, sourceFilePaths : Array<string>, tempFilePaths : Array<string>): Promise<ImageOrVideo[] | ImageOrVideo> {
     Logger.info(TAG, 'into openPickerResult :');
     let resultsList: ImageOrVideo[] = [];
+    let includeExif = this.isNullOrUndefined(options?.includeExif) ? false : options?.includeExif;
     let images = this.isNullOrUndefined(tempFilePaths) ? sourceFilePaths : tempFilePaths;
     Logger.info(TAG, 'into openPickerResult : images = '+ images);
     let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
@@ -333,6 +348,14 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         Logger.info(TAG, 'into openPickerResult value :' + value);
         let imageIS = image.createImageSource(file.fd)
         let imagePM = await imageIS.createPixelMap()
+        if (/\.(jpeg)$/i.test(value) && includeExif) {
+          try {
+            let exifInfo = await this.getImageExif(imageIS);
+            results.exif = exifInfo;
+          } catch (err) {
+            Logger.error(TAG, 'into openPickerResult err :' + JSON.stringify(err));
+          }
+        }
         Logger.info(TAG, 'end createImageSource : imageIS = ' + imageIS + ' imagePM = '+ imagePM);
         let imgInfo = await imagePM.getImageInfo();
         results.height = imgInfo.size.height;
@@ -369,11 +392,29 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   async openCamera(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
     Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(options));
+    let cropping = this.isNullOrUndefined(options?.cropping) ? false : options?.cropping;
+    if (cropping) {
+      let permissionResult = await this.grantPermission();
+      if (!permissionResult) {
+        return new Promise(async(res, rej) => {
+          rej('permission not approved')
+        })
+      }
+    }
+    let quality = options.compressImageQuality;
+    if (!this.isNullOrUndefined(quality) && !(quality >= 0 && quality <= 1)) {
+      return new Promise(async(res, rej) => {
+        rej('quality is error')
+      })
+    }
     let isImg = false;
     let imgResult: Image = {data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
     let videoResult: Video = {duration:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
     let useFrontCamera = this.isNullOrUndefined(options.useFrontCamera) ? false : options.useFrontCamera;
     let writeTempFile = this.isNullOrUndefined(options?.writeTempFile) ? true :options?.writeTempFile;
+    let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
+    let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
+    let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
     let mediaType = options.mediaType == 'photo' ? [picker.PickerMediaType.PHOTO] : (options.mediaType == 'video'
       ? [picker.PickerMediaType.VIDEO] : [picker.PickerMediaType.PHOTO,picker.PickerMediaType.VIDEO]);
     return new Promise(async(res, rej) => {
@@ -385,14 +426,22 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let pickerResult: picker.PickerResult = await picker.pick(mContext, mediaType, pickerProfile);
       Logger.info(TAG, 'into openCamera results: ' + JSON.stringify(pickerResult));
       let imgOrVideoPath = pickerResult.resultUri;
+      let imgCropPath = cropping ? await this.intoCropper(imgOrVideoPath, options) : '';
+      Logger.info(TAG, 'into openCamera imgCropPath = ' + imgCropPath);
       isImg = this.isImage(imgOrVideoPath);
 
       let tempFilePaths = null;
       let sourceFilePaths : Array<string> = [imgOrVideoPath];
-      tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
+      if (qualityNumber !== 1 || forceJpg) {
+        Logger.info(TAG, 'into openCamera qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
+        tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
+      } else {
+        tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
+      }
       let tempFilePath = this.isNullOrUndefined(tempFilePaths) ? null : tempFilePaths[0];
+      let includeExif = this.isNullOrUndefined(options?.includeExif) ? false : options?.includeExif;
       if (isImg) {
-        this.getFileInfo(options?.includeBase64, imgOrVideoPath, tempFilePath).then((imageInfo)=>{
+        this.getFileInfo(includeBase64, imgOrVideoPath, tempFilePath, includeExif).then((imageInfo)=>{
           imgResult.sourceURL = imgOrVideoPath;
           imgResult.path = this.isNullOrUndefined(tempFilePath) ? null : filePrefix + tempFilePath;
           imgResult.exif = imageInfo.exif;
@@ -409,7 +458,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           res(imgResult);
         })
       } else {
-        this.getFileInfo(options?.includeBase64, imgOrVideoPath, tempFilePath).then((imageInfo)=>{
+        this.getFileInfo(false, imgOrVideoPath, tempFilePath, false).then((imageInfo)=>{
           videoResult.sourceURL = imgOrVideoPath;
           videoResult.path = this.isNullOrUndefined(tempFilePath) ? null : filePrefix + tempFilePath;
           videoResult.exif = imageInfo.exif;
@@ -460,20 +509,25 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   async compressPictures(quality: number, forceJpg : boolean, sourceURL: Array<string>) : Promise<Array<string>> {
     Logger.info(TAG, 'into compressPictures sourceURL: ' + sourceURL + ' quality: ' + quality + ' forceJpg: ' + forceJpg);
-    let imageType : string = 'jpeg';
+    let imageType : string = 'jpg';
     let resultImages : Array<string> = new Array<string>();
+    quality = (quality > 100) ? 100 : quality;
     for (let srcPath of sourceURL) {
       if (this.isImage(srcPath)) {
         Logger.info(TAG, 'into compressPictures img srcPath :' + srcPath);
-        let i = srcPath.lastIndexOf('.');
-        if (!forceJpg && i != -1) {
-          imageType = srcPath.substring(i + 1);
+        if (forceJpg) {
+          imageType = 'jpg'
+        } else {
+          let i = srcPath.lastIndexOf('.');
+          if (i != -1) {
+            imageType = srcPath.substring(i + 1);
+          }
         }
         Logger.info(TAG, 'into compressPictures imageType: ' + imageType);
         let files = fs.openSync(srcPath, fs.OpenMode.READ_ONLY)
         let imageISs = image.createImageSource(files.fd);
         let imagePMs = await imageISs.createPixelMap() ;
-        let imagePackerApi = image.createImagePacker();
+        let imagePackerApi = await image.createImagePacker();
         let options: image.PackingOption = {
           format: 'image/jpeg',
           quality: quality,
@@ -550,74 +604,60 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   async openCropper(options?: CropperOptions): Promise<Image>{
     Logger.info(TAG, 'into openCropper : ' + JSON.stringify(options));
+    let permissionResult = await this.grantPermission();
+    if (!permissionResult) {
+      return new Promise(async(res, rej) => {
+        rej('permission not approved')
+      })
+    }
+    let quality = options.compressImageQuality;
+    if (!this.isNullOrUndefined(quality) && !(quality >= 0 && quality <= 1)) {
+      return new Promise(async(res, rej) => {
+        rej('quality is error')
+      })
+    }
     let result: Image = {data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
-    const permissions: Array<Permissions> = [
-      'ohos.permission.READ_MEDIA',
-      'ohos.permission.WRITE_MEDIA',
-      'ohos.permission.MEDIA_LOCATION',
-    ];
-    return new Promise((res, rej) => {
-      atManager.requestPermissionsFromUser(this.ctx.uiAbilityContext, permissions, (err, data) => {
-        if (err) {
-          Logger.error(TAG,'Failed in requestPermission')
-          rej('Failed in requestPermission')
-        } else {
-          Logger.info(TAG,'Succeeded in requestPermission')
-          let title : string = this.isNullOrUndefined(options?.cropperToolbarTitle) ? '编辑图片' : options?.cropperToolbarTitle;
-          let chooseText : string = this.isNullOrUndefined(options?.cropperChooseText) ? 'Choose' : options?.cropperChooseText;
-          let chooseTextColor : string = this.isNullOrUndefined(options?.cropperChooseColor) ? '#FFCC00' : options?.cropperChooseColor;
-          let cancelText : string = this.isNullOrUndefined(options?.cropperCancelText) ? 'Cancel' : options?.cropperCancelText;
-          let cancelTextColor : string = this.isNullOrUndefined(options?.cropperCancelColor) ? '#0000FF' : options?.cropperCancelColor;
-          let showCropGuidelines : boolean = this.isNullOrUndefined(options?.showCropGuidelines) ? true : options?.showCropGuidelines;
-          let showCropFrame : boolean = this.isNullOrUndefined(options?.showCropFrame) ? true : options?.showCropFrame;
-          let cropperRotate : string = options?.cropperRotateButtonsHidden + '';
-          AppStorage.setOrCreate('title', title);
-          AppStorage.setOrCreate('chooseText', chooseText);
-          AppStorage.setOrCreate('chooseTextColor', chooseTextColor);
-          AppStorage.setOrCreate('cancelText', cancelText);
-          AppStorage.setOrCreate('cancelTextColor', cancelTextColor);
-          AppStorage.setOrCreate('cropperRotate', cropperRotate);
-          AppStorage.setOrCreate('showCropGuidelines', showCropGuidelines);
-          AppStorage.setOrCreate('showCropFrame', showCropFrame);
-          let uri = options.path;
-          AppStorage.setOrCreate('filePath', uri);
-          let bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
-          try {
-            let want: Want = {
-              "bundleName": bundleName,
-              "abilityName": "ImageEditAbility",
-            }
-            this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
-              let imgPath = AppStorage.get('cropImagePath') as string;
-              AppStorage.setOrCreate('cropImagePath', '')
-              Logger.info(TAG, 'into openCropper startAbility suc : ' + imgPath);
-              this.getFileInfo(options?.includeBase64, imgPath, null).then((imageInfo) =>{
-                result.path = filePrefix + imgPath;
-                result.exif = imageInfo.exif;
-                result.sourceURL = uri;
-                result.data = imageInfo.data;
-                result.size = imageInfo.size;
-                result.width = imageInfo.width;
-                result.height = imageInfo.height;
-                result.filename = imageInfo.filename;
-                result.mime = imageInfo.mime;
-                result.localIdentifier = imageInfo.localIdentifier;
-                result.cropRect = imageInfo.cropRect;
-                result.creationDate = imageInfo.creationDate + '';
-                result.modificationDate = imageInfo.modificationDate + '';
-                res(result);
-              })
-            } );
-          } catch (err) {
-            Logger.info(TAG, 'into openCropper startAbility err: ' + JSON.stringify(err));
-            rej(result)
-          }
-        }
-      });
+    let includeExif = this.isNullOrUndefined(options?.includeExif) ? false : options?.includeExif;
+    let writeTempFile = this.isNullOrUndefined(options?.writeTempFile) ? true :options?.writeTempFile;
+    let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
+    let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
+    let imgPath = await this.intoCropper(options?.path, options);
+    Logger.info(TAG, 'into openCropper imgPath = ' + imgPath);
+    if (this.isNullOrUndefined(imgPath)) {
+      return new Promise(async(res, rej) => {
+        rej('imgPath is null')
+      })
+    }
+    let tempFilePaths = null;
+    let sourceFilePaths : Array<string> = [imgPath];
+    if (qualityNumber !== 1 || forceJpg) {
+      Logger.info(TAG, 'into openCropper qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
+      tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
+    } else {
+      tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
+    }
+    let tempFilePath = this.isNullOrUndefined(tempFilePaths) ? null : tempFilePaths[0];
+    return new Promise(async (res, rej) => {
+      this.getFileInfo(options?.includeBase64, imgPath, tempFilePath, includeExif).then((imageInfo) => {
+        result.path = filePrefix + imgPath;
+        result.exif = imageInfo.exif;
+        result.sourceURL = options?.path;
+        result.data = imageInfo.data;
+        result.size = imageInfo.size;
+        result.width = imageInfo.width;
+        result.height = imageInfo.height;
+        result.filename = imageInfo.filename;
+        result.mime = imageInfo.mime;
+        result.localIdentifier = imageInfo.localIdentifier;
+        result.cropRect = imageInfo.cropRect;
+        result.creationDate = imageInfo.creationDate + '';
+        result.modificationDate = imageInfo.modificationDate + '';
+        res(result);
+      })
     })
   }
 
-  async getFileInfo(includeBase64: boolean, filePath: string, tempFilePath: string) : Promise<VideoImageInfo>{
+  async getFileInfo(includeBase64: boolean, filePath: string, tempFilePath: string, includeExif: boolean) : Promise<VideoImageInfo>{
     let videoImageInfo : VideoImageInfo = {duration: null};
     let imageType;
     let i = this.isNullOrUndefined(tempFilePath) ? filePath.lastIndexOf('/') : tempFilePath.lastIndexOf('/')
@@ -643,6 +683,14 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       videoImageInfo.data = includeBase64 ? this.imageToBase64(filePath) : null;
       videoImageInfo.height = imgInfo.size.height;
       videoImageInfo.width = imgInfo.size.width;
+      if (/\.(jpeg)$/i.test(filePath) && includeExif) {
+        try {
+          let exifInfo = await this.getImageExif(imageIS);
+          videoImageInfo.exif = exifInfo;
+        } catch (err) {
+          Logger.error(TAG, 'into getFileInfo err :' + JSON.stringify(err));
+        }
+      }
       imagePM.release().then(() => {
         imagePM = undefined;
       })
@@ -666,5 +714,162 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     }
     fs.close(file.fd);
     return videoImageInfo;
+  }
+
+  async intoCropper(filePath: string, options?: Options | CropperOptions) : Promise<string> {
+    Logger.info(TAG, 'into intoCropper : filePath = ' + filePath);
+    let imagePath : string;
+    let bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
+    AppStorage.setOrCreate('filePath', filePath);
+    return new Promise((res, rej) => {
+      let title : string = this.isNullOrUndefined(options?.cropperToolbarTitle) ? '编辑图片' : options?.cropperToolbarTitle;
+      let chooseText : string = this.isNullOrUndefined(options?.cropperChooseText) ? 'Choose' : options?.cropperChooseText;
+      let chooseTextColor : string = this.isNullOrUndefined(options?.cropperChooseColor) ? '#FFCC00' : options?.cropperChooseColor;
+      let cancelText : string = this.isNullOrUndefined(options?.cropperCancelText) ? 'Cancel' : options?.cropperCancelText;
+      let cancelTextColor : string = this.isNullOrUndefined(options?.cropperCancelColor) ? '#0000FF' : options?.cropperCancelColor;
+      let showCropGuidelines : boolean = this.isNullOrUndefined(options?.showCropGuidelines) ? true : options?.showCropGuidelines;
+      let showCropFrame : boolean = this.isNullOrUndefined(options?.showCropFrame) ? true : options?.showCropFrame;
+      let freeStyleCropEnabled : boolean = this.isNullOrUndefined(options?.freeStyleCropEnabled) ? false : options?.freeStyleCropEnabled;
+      let cropperRotate : string = options?.cropperRotateButtonsHidden + '';
+      AppStorage.setOrCreate('textTitle', title);
+      AppStorage.setOrCreate('chooseText', chooseText);
+      AppStorage.setOrCreate('chooseTextColor', chooseTextColor);
+      AppStorage.setOrCreate('cancelText', cancelText);
+      AppStorage.setOrCreate('cancelTextColor', cancelTextColor);
+      AppStorage.setOrCreate('cropperRotate', cropperRotate);
+      AppStorage.setOrCreate('showCropGuidelines', showCropGuidelines);
+      AppStorage.setOrCreate('showCropFrame', showCropFrame);
+      AppStorage.setOrCreate('freeStyleCropEnabled', freeStyleCropEnabled);
+      try {
+        let want: Want = {
+          "bundleName": bundleName,
+          "abilityName": "ImageEditAbility",
+        }
+        this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
+          imagePath = AppStorage.get('cropImagePath') as string;
+          AppStorage.setOrCreate('cropImagePath', '')
+          Logger.info(TAG, 'into intoCropper startAbility suc : ' + imagePath);
+          res(imagePath);
+        });
+      } catch (err) {
+        Logger.error(TAG, 'into intoCropper startAbility err : ' + JSON.stringify(err));
+        res('')
+      }
+    });
+  }
+
+  async getImageExif(imageSource: image.ImageSource): Promise<Exif> {
+    Logger.info(TAG, 'into getImageExif:')
+    let bitsPerSample;
+    let orientation;
+    let imageLength;
+    let imageWidth;
+    let gpsLatitude;
+    let gpsLongitude;
+    let gpsLatitudeRef;
+    let gpsLongitudeRef;
+    let dateTimeOriginal;
+    let exposureTime;
+    let sceneType;
+    let isoSpeedRatings;
+    let fNumber;
+    try {
+      bitsPerSample = await imageSource.getImageProperty(image.PropertyKey.BITS_PER_SAMPLE);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif bitsPerSample err' + JSON.stringify(err))
+    }
+    try {
+      orientation = await imageSource.getImageProperty(image.PropertyKey.ORIENTATION);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif orientation err' + JSON.stringify(err))
+    }
+    try {
+      imageLength = await imageSource.getImageProperty(image.PropertyKey.IMAGE_LENGTH);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif imageLength err' + JSON.stringify(err))
+    }
+    try {
+      imageWidth = await imageSource.getImageProperty(image.PropertyKey.IMAGE_WIDTH);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif imageWidth err' + JSON.stringify(err))
+    }
+    try {
+      gpsLatitude = await imageSource.getImageProperty(image.PropertyKey.GPS_LATITUDE);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif gpsLatitude err' + JSON.stringify(err))
+    }
+    try {
+      gpsLongitude = await imageSource.getImageProperty(image.PropertyKey.GPS_LONGITUDE);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif gpsLongitude err' + JSON.stringify(err))
+    }
+    try {
+      gpsLatitudeRef = await imageSource.getImageProperty(image.PropertyKey.GPS_LATITUDE_REF);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif gpsLatitudeRef err' + JSON.stringify(err))
+    }
+    try {
+      gpsLongitudeRef = await imageSource.getImageProperty(image.PropertyKey.GPS_LONGITUDE_REF);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif gpsLongitudeRef err' + JSON.stringify(err))
+    }
+    try {
+      dateTimeOriginal = await imageSource.getImageProperty(image.PropertyKey.DATE_TIME_ORIGINAL);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif dateTimeOriginal err' + JSON.stringify(err))
+    }
+    try {
+      exposureTime = await imageSource.getImageProperty(image.PropertyKey.EXPOSURE_TIME);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif exposureTime err' + JSON.stringify(err))
+    }
+    try {
+      sceneType = await imageSource.getImageProperty(image.PropertyKey.SCENE_TYPE);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif sceneType err' + JSON.stringify(err))
+    }
+    try {
+      isoSpeedRatings = await imageSource.getImageProperty(image.PropertyKey.ISO_SPEED_RATINGS);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif isoSpeedRatings err' + JSON.stringify(err))
+    }
+    try {
+      fNumber = await imageSource.getImageProperty(image.PropertyKey.F_NUMBER);
+    } catch (err) {
+      Logger.info(TAG, 'into getImageExif fNumber err' + JSON.stringify(err))
+    }
+    return {
+      BitsPerSample: bitsPerSample,
+      Orientation: orientation,
+      ImageLength: imageLength,
+      ImageWidth: imageWidth,
+      GPSLatitude: gpsLatitude,
+      GPSLongitude: gpsLongitude,
+      GPSLatitudeRef: gpsLatitudeRef,
+      GPSLongitudeRef: gpsLongitudeRef,
+      DateTimeOriginal: dateTimeOriginal,
+      ExposureTime: exposureTime,
+      SceneType: sceneType,
+      ISOSpeedRatings: isoSpeedRatings,
+      FNumber: fNumber,
+    }
+  }
+
+  grantPermission(): Promise<boolean> {
+    Logger.info(TAG, 'into grantPermission:')
+    const permissions: Array<Permissions> = [
+      'ohos.permission.READ_MEDIA',
+      'ohos.permission.WRITE_MEDIA',
+      'ohos.permission.MEDIA_LOCATION',
+    ];
+    return new Promise((res, rej) => {
+      atManager.requestPermissionsFromUser(this.ctx.uiAbilityContext, permissions)
+        .then((data: PermissionRequestResult) => {
+          res(data?.authResults[0] === 0)
+        }).catch((err) =>{
+        res(false)
+        Logger.info(TAG, 'grantPermission err = ' + JSON.stringify(err))
+      })
+    });
   }
 }
