@@ -333,7 +333,17 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       }
       results.sourceURL = sourceFilePaths[j];
       results.filename = fileName;
-
+      let exifInfo;
+      if (/\.(jpeg)$/i.test(sourceFilePaths[j]) && includeExif) {
+        try {
+          let exifFile = fs.openSync(sourceFilePaths[j], fs.OpenMode.READ_ONLY);
+          let exifImageIS = image.createImageSource(exifFile.fd);
+          exifInfo = await this.getImageExif(exifImageIS);
+        } catch (err) {
+          Logger.error(TAG, 'into getPickerResult err :' + JSON.stringify(err));
+        }
+      }
+      results.exif = exifInfo;
       let file = fs.openSync(value, fs.OpenMode.READ_ONLY)
       Logger.info(TAG, 'into openSync : file.fd = '+ file.fd + ' file.path = ' + file.path + ' file.name = ' + file.name);
       let stat = fs.statSync(file.fd);
@@ -348,14 +358,6 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         Logger.info(TAG, 'into openPickerResult value :' + value);
         let imageIS = image.createImageSource(file.fd)
         let imagePM = await imageIS.createPixelMap()
-        if (/\.(jpeg)$/i.test(value) && includeExif) {
-          try {
-            let exifInfo = await this.getImageExif(imageIS);
-            results.exif = exifInfo;
-          } catch (err) {
-            Logger.error(TAG, 'into openPickerResult err :' + JSON.stringify(err));
-          }
-        }
         Logger.info(TAG, 'end createImageSource : imageIS = ' + imageIS + ' imagePM = '+ imagePM);
         let imgInfo = await imagePM.getImageInfo();
         results.height = imgInfo.size.height;
@@ -441,9 +443,19 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let tempFilePath = this.isNullOrUndefined(tempFilePaths) ? null : tempFilePaths[0];
       let includeExif = this.isNullOrUndefined(options?.includeExif) ? false : options?.includeExif;
       if (isImg) {
-        this.getFileInfo(includeBase64, imgOrVideoPath, tempFilePath, includeExif).then((imageInfo)=>{
+        let exifInfo;
+        if (/\.(jpeg)$/i.test(imgOrVideoPath) && includeExif) {
+          try {
+            let exifFile = fs.openSync(imgOrVideoPath, fs.OpenMode.READ_ONLY);
+            let exifImageIS = image.createImageSource(exifFile.fd);
+            exifInfo = await this.getImageExif(exifImageIS);
+          } catch (err) {
+            Logger.error(TAG, 'into openCamera err :' + JSON.stringify(err));
+          }
+        }
+        this.getFileInfo(includeBase64, imgOrVideoPath, tempFilePath, exifInfo).then((imageInfo)=>{
           imgResult.sourceURL = imgOrVideoPath;
-          imgResult.path = this.isNullOrUndefined(tempFilePath) ? null : filePrefix + tempFilePath;
+          imgResult.path = this.isNullOrUndefined(tempFilePath) ? imgOrVideoPath : filePrefix + tempFilePath;
           imgResult.exif = imageInfo.exif;
           imgResult.data = imageInfo.data;
           imgResult.size = imageInfo.size;
@@ -458,9 +470,9 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           res(imgResult);
         })
       } else {
-        this.getFileInfo(false, imgOrVideoPath, tempFilePath, false).then((imageInfo)=>{
+        this.getFileInfo(false, imgOrVideoPath, tempFilePath, null).then((imageInfo)=>{
           videoResult.sourceURL = imgOrVideoPath;
-          videoResult.path = this.isNullOrUndefined(tempFilePath) ? null : filePrefix + tempFilePath;
+          videoResult.path = this.isNullOrUndefined(tempFilePath) ? imgOrVideoPath : filePrefix + tempFilePath;
           videoResult.exif = imageInfo.exif;
           videoResult.size = imageInfo.size;
           videoResult.width = imageInfo.width;
@@ -621,7 +633,8 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let writeTempFile = this.isNullOrUndefined(options?.writeTempFile) ? true :options?.writeTempFile;
     let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
     let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
-    let imgPath = await this.intoCropper(options?.path, options);
+    let path = options?.path;
+    let imgPath = await this.intoCropper(path, options);
     Logger.info(TAG, 'into openCropper imgPath = ' + imgPath);
     if (this.isNullOrUndefined(imgPath)) {
       return new Promise(async(res, rej) => {
@@ -637,8 +650,18 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
     }
     let tempFilePath = this.isNullOrUndefined(tempFilePaths) ? null : tempFilePaths[0];
+    let exifInfo;
+    if (/\.(jpeg)$/i.test(path) && includeExif) {
+      try {
+        let exifFile = fs.openSync(path, fs.OpenMode.READ_ONLY);
+        let exifImageIS = image.createImageSource(exifFile.fd);
+        exifInfo = await this.getImageExif(exifImageIS);
+      } catch (err) {
+        Logger.error(TAG, 'into openCamera err :' + JSON.stringify(err));
+      }
+    }
     return new Promise(async (res, rej) => {
-      this.getFileInfo(options?.includeBase64, imgPath, tempFilePath, includeExif).then((imageInfo) => {
+      this.getFileInfo(options?.includeBase64, imgPath, tempFilePath, exifInfo).then((imageInfo) => {
         result.path = filePrefix + imgPath;
         result.exif = imageInfo.exif;
         result.sourceURL = options?.path;
@@ -657,7 +680,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     })
   }
 
-  async getFileInfo(includeBase64: boolean, filePath: string, tempFilePath: string, includeExif: boolean) : Promise<VideoImageInfo>{
+  async getFileInfo(includeBase64: boolean, filePath: string, tempFilePath: string, exifInfo: Exif) : Promise<VideoImageInfo>{
     let videoImageInfo : VideoImageInfo = {duration: null};
     let imageType;
     let i = this.isNullOrUndefined(tempFilePath) ? filePath.lastIndexOf('/') : tempFilePath.lastIndexOf('/')
@@ -683,14 +706,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       videoImageInfo.data = includeBase64 ? this.imageToBase64(filePath) : null;
       videoImageInfo.height = imgInfo.size.height;
       videoImageInfo.width = imgInfo.size.width;
-      if (/\.(jpeg)$/i.test(filePath) && includeExif) {
-        try {
-          let exifInfo = await this.getImageExif(imageIS);
-          videoImageInfo.exif = exifInfo;
-        } catch (err) {
-          Logger.error(TAG, 'into getFileInfo err :' + JSON.stringify(err));
-        }
-      }
+      videoImageInfo.exif = exifInfo;
       imagePM.release().then(() => {
         imagePM = undefined;
       })
