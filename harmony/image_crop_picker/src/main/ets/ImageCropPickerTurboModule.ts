@@ -445,8 +445,6 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           Logger.error(TAG, 'into openCamera fail err = '+ err.toString());
         }
         fs.closeSync(file);
-        let imgCropPath = cropping ? await this.intoCropper(imgOrVideoPath, options) : '';
-        Logger.info(TAG, 'into openCamera imgCropPath = ' + imgCropPath);
       }
       let tempFilePaths = null;
       let sourceFilePaths : Array<string> = [imgOrVideoPath];
@@ -468,6 +466,11 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           } catch (err) {
             Logger.error(TAG, 'into openCamera err :' + JSON.stringify(err));
           }
+        }
+        let imgCropPath = cropping ? await this.intoCropper(imgOrVideoPath, options) : '';
+        if (!this.isNullOrUndefined(imgCropPath)) {
+          tempFilePath = imgCropPath;
+          Logger.info(TAG, 'into openCamera imgCropPath = ' + imgCropPath);
         }
         this.getFileInfo(includeBase64, imgOrVideoPath, tempFilePath, exifInfo).then((imageInfo)=>{
           imgResult.sourceURL = imgOrVideoPath;
@@ -701,7 +704,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     }
     return new Promise(async (res, rej) => {
       this.getFileInfo(options?.includeBase64, imgPath, tempFilePath, exifInfo).then((imageInfo) => {
-        result.path = filePrefix + imgPath;
+        result.path = this.isNullOrUndefined(tempFilePath) ? filePrefix + imgPath : filePrefix + tempFilePath;
         result.exif = imageInfo.exif;
         result.sourceURL = options?.path;
         result.data = imageInfo.data;
