@@ -6,6 +6,7 @@ import type Want from '@ohos.app.ability.Want';
 import image from '@ohos.multimedia.image';
 import media from '@ohos.multimedia.media';
 import util from '@ohos.util';
+import uri from '@ohos.uri';
 import picker from '@ohos.multimedia.cameraPicker';
 import camera from '@ohos.multimedia.camera';
 import { BusinessError } from '@ohos.base';
@@ -221,6 +222,12 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   async openPicker(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
     Logger.info(TAG, 'into openPicker request' + JSON.stringify(options));
+    let permissionResult = await this.grantPermission();
+    if (!permissionResult) {
+      return new Promise(async(res, rej) => {
+        rej('permission not approved')
+      })
+    }
     let minFiles = this.isNullOrUndefined(options?.minFiles) ? MinNumber : options.minFiles;
     let maxFiles = this.isNullOrUndefined(options?.maxFiles) ? MaxNumber : options.maxFiles;
     let isShowSerialNum = this.isNullOrUndefined(options?.showsSelectedCount) ? true : options?.showsSelectedCount;
@@ -395,13 +402,11 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async openCamera(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
     Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(options));
     let cropping = this.isNullOrUndefined(options?.cropping) ? false : options?.cropping;
-    if (cropping) {
-      let permissionResult = await this.grantPermission();
-      if (!permissionResult) {
-        return new Promise(async(res, rej) => {
-          rej('permission not approved')
-        })
-      }
+    let permissionResult = await this.grantPermission();
+    if (!permissionResult) {
+      return new Promise(async(res, rej) => {
+        rej('permission not approved')
+      })
     }
     let quality = options.compressImageQuality;
     if (!this.isNullOrUndefined(quality) && !(quality >= 0 && quality <= 1)) {
@@ -428,10 +433,21 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let pickerResult: picker.PickerResult = await picker.pick(mContext, mediaType, pickerProfile);
       Logger.info(TAG, 'into openCamera results: ' + JSON.stringify(pickerResult));
       let imgOrVideoPath = pickerResult.resultUri;
-      let imgCropPath = cropping ? await this.intoCropper(imgOrVideoPath, options) : '';
-      Logger.info(TAG, 'into openCamera imgCropPath = ' + imgCropPath);
       isImg = this.isImage(imgOrVideoPath);
-
+      if (isImg) {
+        let file = fs.openSync(imgOrVideoPath, fs.OpenMode.CREATE);
+        try {
+          let dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.jpeg';
+          fs.copyFileSync(file.fd, dstPath, 0);
+          imgOrVideoPath = dstPath;
+          Logger.info(TAG, 'into openCamera suc dstPath = '+ dstPath);
+        } catch (err) {
+          Logger.error(TAG, 'into openCamera fail err = '+ err.toString());
+        }
+        fs.closeSync(file);
+        let imgCropPath = cropping ? await this.intoCropper(imgOrVideoPath, options) : '';
+        Logger.info(TAG, 'into openCamera imgCropPath = ' + imgCropPath);
+      }
       let tempFilePaths = null;
       let sourceFilePaths : Array<string> = [imgOrVideoPath];
       if (qualityNumber !== 1 || forceJpg) {
@@ -455,7 +471,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         }
         this.getFileInfo(includeBase64, imgOrVideoPath, tempFilePath, exifInfo).then((imageInfo)=>{
           imgResult.sourceURL = imgOrVideoPath;
-          imgResult.path = this.isNullOrUndefined(tempFilePath) ? imgOrVideoPath : filePrefix + tempFilePath;
+          imgResult.path = this.isNullOrUndefined(tempFilePath) ? filePrefix + imgOrVideoPath : filePrefix + tempFilePath;
           imgResult.exif = imageInfo.exif;
           imgResult.data = imageInfo.data;
           imgResult.size = imageInfo.size;
@@ -495,10 +511,28 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   imageToBase64(filePath: string): string {
     Logger.info(TAG, 'into imageToBase64 filePath: ' + filePath);
+    let uriPath = new uri.URI(filePath);
+    let dstPath = filePath;
+    if (uriPath.host === 'media') {
+      let i = filePath.lastIndexOf('.');
+      let imageType;
+      if (i != -1) {
+        imageType = filePath.substring(i + 1);
+      }
+      let file = fs.openSync(filePath, fs.OpenMode.CREATE);
+      try {
+        dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.' + imageType;
+        fs.copyFileSync(file.fd, dstPath, 0);
+        Logger.info(TAG, 'into imageToBase64 suc dstPath = '+ dstPath);
+      } catch (err) {
+        Logger.error(TAG, 'into imageToBase64 fail err = '+ err.toString());
+      }
+      fs.closeSync(file);
+    }
     let base64Data;
     try {
-      let file = fs.openSync(filePath, fs.OpenMode.READ_ONLY);
-      let stat = fs.lstatSync(filePath);
+      let file = fs.openSync(dstPath, fs.OpenMode.READ_ONLY);
+      let stat = fs.lstatSync(dstPath);
       Logger.info(TAG, 'into imageToBase64 stat.size = ' + stat.size);
       let buf = new ArrayBuffer(stat.size);
       fs.readSync(file.fd, buf);
@@ -616,6 +650,12 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   async openCropper(options?: CropperOptions): Promise<Image>{
     Logger.info(TAG, 'into openCropper : ' + JSON.stringify(options));
+    let path = options?.path;
+    if (this.isNullOrUndefined(path?.trim())) {
+      return new Promise(async(res, rej) => {
+        rej('path is empty')
+      })
+    }
     let permissionResult = await this.grantPermission();
     if (!permissionResult) {
       return new Promise(async(res, rej) => {
@@ -633,7 +673,6 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let writeTempFile = this.isNullOrUndefined(options?.writeTempFile) ? true :options?.writeTempFile;
     let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
     let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
-    let path = options?.path;
     let imgPath = await this.intoCropper(path, options);
     Logger.info(TAG, 'into openCropper imgPath = ' + imgPath);
     if (this.isNullOrUndefined(imgPath)) {
