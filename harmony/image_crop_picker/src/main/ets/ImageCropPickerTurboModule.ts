@@ -8,6 +8,7 @@ import media from '@ohos.multimedia.media';
 import util from '@ohos.util';
 import uri from '@ohos.uri';
 import picker from '@ohos.multimedia.cameraPicker';
+import photoAccessHelper from '@ohos.file.photoAccessHelper';
 import camera from '@ohos.multimedia.camera';
 import { BusinessError } from '@ohos.base';
 import fs, { Filter } from '@ohos.file.fs';
@@ -221,7 +222,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   }
 
   async openPicker(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
-    Logger.info(TAG, 'into openPicker request' + JSON.stringify(options));
+    Logger.info(`${TAG} into openPicker request ${JSON.stringify(options)}`);
     let permissionResult = await this.grantPermission();
     if (!permissionResult) {
       return new Promise(async(res, rej) => {
@@ -243,74 +244,56 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       })
     }
     let multiple = this.isNullOrUndefined(options.multiple) ? false : options.multiple;
-    let mediaType = options.mediaType == 'photo' ? 'FILTER_MEDIA_TYPE_IMAGE'
-      : (options.mediaType == 'video' ? 'FILTER_MEDIA_TYPE_VIDEO' : 'FILTER_MEDIA_TYPE_ALL');
+    let mediaType = options.mediaType == 'photo' ? photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE
+      : (options.mediaType == 'video' ? photoAccessHelper.PhotoViewMIMETypes.VIDEO_TYPE : photoAccessHelper.PhotoViewMIMETypes.IMAGE_VIDEO_TYPE);
 
     let writeTempFile = this.isNullOrUndefined(options.writeTempFile) ? true :options.writeTempFile;
     let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
     let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
-
-    let want : Want = {};
-    if (multiple) {
-      want = {
-        "type": WANT_PARAM_URI_SELECT_MULTIPLE,
-        "action": ENTER_GALLERY_ACTION,
-        "parameters": {
-          uri: WANT_PARAM_URI_SELECT_MULTIPLE,
-          filterMediaType: mediaType,
-          maxSelectCount: maxFiles,
-          isShowSerialNum: isShowSerialNum,
-        },
-        "entities": []
+    try {
+      let photoSelectOptions = new photoAccessHelper.PhotoSelectOptions();
+      photoSelectOptions.MIMEType = mediaType;
+      photoSelectOptions.maxSelectNumber = multiple ? maxFiles : 1;
+      photoSelectOptions.isSearchSupported = false;
+      let photoPicker = new photoAccessHelper.PhotoViewPicker();
+      let result : photoAccessHelper.PhotoSelectResult = await photoPicker.select(photoSelectOptions);
+      let sourceFilePaths: Array<string> = result.photoUris as Array<string>;
+      let tempFilePaths = null;
+      Logger.info(`${TAG} into openPicker tempFilePaths ${JSON.stringify(sourceFilePaths)}`);
+      if (qualityNumber !== 1 || forceJpg) {
+        Logger.info(`${TAG} qualityNumber = ${qualityNumber} forceJpg = ${forceJpg}`);
+        tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
+      } else {
+        tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
       }
-    } else {
-      want = {
-        "type": WANT_PARAM_URI_SELECT_SINGLE,
-        "action": ENTER_GALLERY_ACTION,
-        "parameters": {
-          uri: WANT_PARAM_URI_SELECT_SINGLE,
-          filterMediaType: mediaType,
-        },
-        "entities": []
-      }
-    }
-    let result: AbilityResult = await this.ctx.uiAbilityContext.startAbilityForResult(want as Want);
-    if (result.resultCode == -1) {
+      return this.getPickerResult(options, sourceFilePaths, tempFilePaths);
+    } catch (error) {
+      Logger.error(`${TAG} PhotoViewPicker failed err: ${JSON.stringify(error)}`);
       return new Promise(async(res, rej) => {
-        rej('result.resultCode is -1')
+        rej('PhotoViewPicker is failed')
       })
     }
-    let sourceFilePaths: Array<string> = result.want.parameters['select-item-list'] as Array<string>;
-    let tempFilePaths = null;
-    Logger.info(TAG, 'into openPicker tempFilePaths = '+ qualityNumber + ' ' + forceJpg);
-    if (qualityNumber !== 1 || forceJpg) {
-      Logger.info(TAG, 'qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
-      tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
-    } else {
-      tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
-    }
-    return this.getPickerResult(options, sourceFilePaths, tempFilePaths);
   }
 
   getTempFilePaths(images : Array<string>): Array<string> {
     let resultImages : Array<string> = new Array<string>();
-    Logger.info(TAG, 'getTempFilePaths images = '+ images);
+    Logger.info(`${TAG} getTempFilePaths images = ${images}`);
     for (let srcPath of images) {
-        Logger.info(TAG, 'getTempFilePaths img srcPath = '+ srcPath);
+        Logger.info(`${TAG} getTempFilePaths img srcPath = ${srcPath}`);
         let i = srcPath.lastIndexOf('.');
         let imageType = '';
         if (i != -1) {
           imageType = srcPath.substring(i + 1);
-          Logger.info(TAG, 'getTempFilePaths img imageType = '+ imageType);
+          Logger.info(`${TAG} getTempFilePaths img imageType = ${imageType}`);
         }
         let file = fs.openSync(srcPath, fs.OpenMode.CREATE);
         let dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.' + imageType;
         try {
           fs.copyFileSync(file.fd, dstPath, 0);
           resultImages.push(dstPath);
-          Logger.info(TAG, 'getTempFilePaths suc dstPath = '+ dstPath);
+          Logger.info(`${TAG} getTempFilePaths suc dstPath = ${dstPath}`);
         } catch (err) {
-          Logger.info(TAG, 'getTempFilePaths fail err = '+ err.toString());
+          Logger.info(`${TAG}, getTempFilePaths fail err = ${JSON.stringify(err)}`);
         }
         fs.closeSync(file);
     }
@@ -318,15 +301,15 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   }
 
   async getPickerResult(options: Options, sourceFilePaths : Array<string>, tempFilePaths : Array<string>): Promise<ImageOrVideo[] | ImageOrVideo> {
-    Logger.info(TAG, 'into openPickerResult :');
+    Logger.info(`${TAG}, into openPickerResult :`);
     let resultsList: ImageOrVideo[] = [];
     let includeExif = this.isNullOrUndefined(options?.includeExif) ? false : options?.includeExif;
     let images = this.isNullOrUndefined(tempFilePaths) ? sourceFilePaths : tempFilePaths;
-    Logger.info(TAG, 'into openPickerResult : images = '+ images);
+    Logger.info(`${TAG} into openPickerResult : images = ${images}`);
     let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
-    let results = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null}
+    let results;
     for (let j = 0;j < images.length;j++) {
-
+      results = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
       let value = images[j];
       if (this.isNullOrUndefined(value)) {
         return;
@@ -347,12 +330,12 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           let exifImageIS = image.createImageSource(exifFile.fd);
           exifInfo = await this.getImageExif(exifImageIS);
         } catch (err) {
-          Logger.error(TAG, 'into getPickerResult err :' + JSON.stringify(err));
+          Logger.error(`${TAG} into getPickerResult err : ${JSON.stringify(err)}`);
         }
       }
       results.exif = exifInfo;
       let file = fs.openSync(value, fs.OpenMode.READ_ONLY)
-      Logger.info(TAG, 'into openSync : file.fd = '+ file.fd + ' file.path = ' + file.path + ' file.name = ' + file.name);
+      Logger.info(`${TAG} into openSync : file.fd = ${file.fd} file.path = ${file.path} file.name = ${file.name}`);
       let stat = fs.statSync(file.fd);
       let length = stat.size;
       results.size = length;
@@ -362,10 +345,10 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       if (this.isImage(value)) {
         results.data = includeBase64 ? this.imageToBase64(value) : null;
         results.mime = 'image/' + imageType;
-        Logger.info(TAG, 'into openPickerResult value :' + value);
+        Logger.info(`${TAG} into openPickerResult value : ${value}`);
         let imageIS = image.createImageSource(file.fd)
         let imagePM = await imageIS.createPixelMap()
-        Logger.info(TAG, 'end createImageSource : imageIS = ' + imageIS + ' imagePM = '+ imagePM);
+        Logger.info(`${TAG} end createImageSource : imageIS = ${imageIS} imagePM = ${imagePM}`);
         let imgInfo = await imagePM.getImageInfo();
         results.height = imgInfo.size.height;
         results.width = imgInfo.size.width;
@@ -377,11 +360,11 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         })
         results.duration = null;
       } else {
-        Logger.info(TAG, 'into getPickerResult video start');
+        Logger.info(`${TAG} into getPickerResult video start`);
         results.data = null;
         results.mime = 'video/' + imageType;
         let url = 'fd://' + file.fd;
-        Logger.info(TAG, 'start avPlayer url:' + url);
+        Logger.info(`${TAG} start avPlayer url = ${url}`);
         avMetadataExtractor = await media.createAVMetadataExtractor();
         avMetadataExtractor.fdSrc = { fd: file.fd, offset: 0, length: length };
         try {
@@ -390,7 +373,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           results.width = Number(res.videoWidth);
           results.height = Number(res.videoHeight);
         } catch (error) {
-          Logger.error(TAG, 'get video info suc error:' + error);
+          Logger.error(`${TAG} get video info suc error = ${JSON.stringify(error)}`);
         }
       }
       resultsList.push(results);
@@ -400,7 +383,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   }
 
   async openCamera(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
-    Logger.info(TAG, 'into openCamera request: ' + JSON.stringify(options));
+    Logger.info(`${TAG} into openCamera request = ${JSON.stringify(options)}`);
     let cropping = this.isNullOrUndefined(options?.cropping) ? false : options?.cropping;
     let permissionResult = await this.grantPermission();
     if (!permissionResult) {
@@ -431,7 +414,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         cameraPosition: useFrontCamera? camera.CameraPosition.CAMERA_POSITION_FRONT : camera.CameraPosition.CAMERA_POSITION_BACK,
       };
       let pickerResult: picker.PickerResult = await picker.pick(mContext, mediaType, pickerProfile);
-      Logger.info(TAG, 'into openCamera results: ' + JSON.stringify(pickerResult));
+      Logger.info(`${TAG} into openCamera results = ${JSON.stringify(pickerResult)}`);
       let imgOrVideoPath = pickerResult.resultUri;
       isImg = this.isImage(imgOrVideoPath);
       if (isImg) {
@@ -440,16 +423,16 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           let dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.jpeg';
           fs.copyFileSync(file.fd, dstPath, 0);
           imgOrVideoPath = dstPath;
-          Logger.info(TAG, 'into openCamera suc dstPath = '+ dstPath);
+          Logger.info(`${TAG} into openCamera suc dstPath = ${dstPath}`);
         } catch (err) {
-          Logger.error(TAG, 'into openCamera fail err = '+ err.toString());
+          Logger.error(`${TAG} into openCamera fail err = ${JSON.stringify(err)}`);
         }
         fs.closeSync(file);
       }
       let tempFilePaths = null;
       let sourceFilePaths : Array<string> = [imgOrVideoPath];
       if (qualityNumber !== 1 || forceJpg) {
-        Logger.info(TAG, 'into openCamera qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
+        Logger.info(`${TAG} into openCamera qualityNumber = ${qualityNumber} forceJpg = ${forceJpg}`);
         tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
       } else {
         tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
@@ -464,13 +447,13 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
             let exifImageIS = image.createImageSource(exifFile.fd);
             exifInfo = await this.getImageExif(exifImageIS);
           } catch (err) {
-            Logger.error(TAG, 'into openCamera err :' + JSON.stringify(err));
+            Logger.error(`${TAG} into openCamera err = ${JSON.stringify(err)}`);
           }
         }
         let imgCropPath = cropping ? await this.intoCropper(imgOrVideoPath, options) : '';
         if (!this.isNullOrUndefined(imgCropPath)) {
           tempFilePath = imgCropPath;
-          Logger.info(TAG, 'into openCamera imgCropPath = ' + imgCropPath);
+          Logger.info(`${TAG} into openCamera imgCropPath = ${imgCropPath}`);
         }
         this.getFileInfo(includeBase64, imgOrVideoPath, tempFilePath, exifInfo).then((imageInfo)=>{
           imgResult.sourceURL = imgOrVideoPath;
@@ -513,7 +496,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   };
 
   imageToBase64(filePath: string): string {
-    Logger.info(TAG, 'into imageToBase64 filePath: ' + filePath);
+    Logger.info(`${TAG} into imageToBase64 filePath = ${filePath}`);
     let uriPath = new uri.URI(filePath);
     let dstPath = filePath;
     if (uriPath.host === 'media') {
@@ -526,9 +509,9 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       try {
         dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.' + imageType;
         fs.copyFileSync(file.fd, dstPath, 0);
-        Logger.info(TAG, 'into imageToBase64 suc dstPath = '+ dstPath);
+        Logger.info(`${TAG} into imageToBase64 suc dstPath = ${dstPath}`);
       } catch (err) {
-        Logger.error(TAG, 'into imageToBase64 fail err = '+ err.toString());
+        Logger.error(`${TAG} into imageToBase64 fail err = ${JSON.stringify(err)}`);
       }
       fs.closeSync(file);
     }
@@ -536,34 +519,34 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     try {
       let file = fs.openSync(dstPath, fs.OpenMode.READ_ONLY);
       let stat = fs.lstatSync(dstPath);
-      Logger.info(TAG, 'into imageToBase64 stat.size = ' + stat.size);
+      Logger.info(`${TAG} into imageToBase64 stat.size = ${stat.size}`);
       let buf = new ArrayBuffer(stat.size);
       fs.readSync(file.fd, buf);
       let unit8Array: Uint8Array = new Uint8Array(buf);
       let base64Helper = new util.Base64Helper();
       base64Data = base64Helper.encodeToStringSync(unit8Array, util.Type.BASIC);
       fs.closeSync(file);
-      Logger.info(TAG, 'into imageToBase64 base64Data: ' + base64Data);
+      Logger.info(`${TAG} into imageToBase64 base64Data = ${base64Data}`);
     } catch (err) {
-      Logger.error(TAG, 'into imageToBase64 err: ' + JSON.stringify(err));
+      Logger.error(`${TAG} into imageToBase64 err = ${JSON.stringify(err)}`);
     }
     return base64Data;
   }
 
   isImage(filePath : string) : boolean{
-    Logger.info(TAG, 'into isImage fileName = ' + filePath);
+    Logger.info(`${TAG} into isImage fileName = ${filePath}`);
     const imageExtensionsRegex = /\.(jpg|jpeg|png|gif|bmp|webp)$/i;
     return imageExtensionsRegex.test(filePath);
   }
 
   async compressPictures(quality: number, forceJpg : boolean, sourceURL: Array<string>) : Promise<Array<string>> {
-    Logger.info(TAG, 'into compressPictures sourceURL: ' + sourceURL + ' quality: ' + quality + ' forceJpg: ' + forceJpg);
+    Logger.info(`${TAG} into compressPictures sourceURL = ${sourceURL} quality = ${quality} forceJpg = ${forceJpg}`);
     let imageType : string = 'jpg';
     let resultImages : Array<string> = new Array<string>();
     quality = (quality > 100) ? 100 : quality;
     for (let srcPath of sourceURL) {
       if (this.isImage(srcPath)) {
-        Logger.info(TAG, 'into compressPictures img srcPath :' + srcPath);
+        Logger.info(`${TAG} into compressPictures img srcPath = ${srcPath}`);
         if (forceJpg) {
           imageType = 'jpg'
         } else {
@@ -572,7 +555,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
             imageType = srcPath.substring(i + 1);
           }
         }
-        Logger.info(TAG, 'into compressPictures imageType: ' + imageType);
+        Logger.info(`${TAG} into compressPictures imageType = ${imageType}`);
         let files = fs.openSync(srcPath, fs.OpenMode.READ_ONLY)
         let imageISs = image.createImageSource(files.fd);
         let imagePMs = await imageISs.createPixelMap() ;
@@ -583,19 +566,19 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         };
         try{
           let packerData = await imagePackerApi.packing(imagePMs, options);
-          Logger.info(TAG, 'into compressPictures data: ' + JSON.stringify(packerData));
+          Logger.info(`${TAG} into compressPictures data = ${JSON.stringify(packerData)}`);
           let dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.' + imageType;
           let newFile = fs.openSync(dstPath, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
-          Logger.info(TAG, 'into compressPictures newFile id: ' + newFile.fd);
+          Logger.info(`${TAG} into compressPictures newFile id = ${newFile.fd}`);
           const number = fs.writeSync(newFile.fd, packerData);
-          Logger.info(TAG, 'into compressPictures write data to file succeed size: ' + number);
+          Logger.info(`${TAG} into compressPictures write data to file succeed size = ${number}`);
           resultImages.push(dstPath);
           fs.closeSync(files);
         } catch (err) {
-          Logger.error(TAG, 'into compressPictures write data to file failed err: ' + JSON.stringify(err));
+          Logger.error(`${TAG} into compressPictures write data to file failed err = ${JSON.stringify(err)}`);
         }
       } else {
-        Logger.info(TAG, 'into compressPictures video srcPath :' + srcPath);
+        Logger.info(`${TAG} into compressPictures video srcPath = ${srcPath}`);
         resultImages.push(srcPath);
       }
     }
@@ -615,28 +598,28 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     option.filter.displayName = ['*'];
     option.filter.fileSizeOver = 0;
     option.filter.lastModifiedAfter = new Date(0).getTime();
-    Logger.info(TAG, "into getListFile filesDir = " + filesDir);
+    Logger.info(`${TAG} into getListFile filesDir = ${filesDir}`);
     let files = fs.listFileSync(filesDir, option);
     for (let i = 0; i < files.length; i++) {
       let listFilePath: FilePath = {}
       listFilePath.path = files[i];
       filePathResult.result.push(listFilePath);
     }
-    Logger.info(TAG, "into getListFile arrayList = " + JSON.stringify(filePathResult));
+    Logger.info(`${TAG} into getListFile arrayList = ${JSON.stringify(filePathResult)}`);
     return filePathResult;
   }
 
   async cleanSingle(path: string): Promise<void> {
-    Logger.info(TAG, "into cleanSingle path = "+path);
+    Logger.info(`${TAG} into cleanSingle path = ${path}`);
     let filePath = path.trim();
     fs.access(filePath, (err) => {
       if (err) {
-        Logger.info(TAG, 'cleanSingle access error data =' + err.data);
+        Logger.info(`${TAG} cleanSingle access error data = ${err.data}`);
       } else {
         fs.unlink(filePath).then(() => {
-          Logger.info(TAG, "cleanSingle file succeed");
+          Logger.info(`${TAG} cleanSingle file succeed`);
         }).catch((err: BusinessError) => {
-          Logger.error(TAG, "cleanSingle err : " + JSON.stringify(err));
+          Logger.error(`${TAG} cleanSingle err = ${JSON.stringify(err)}`);
         });
       }
     });
@@ -645,14 +628,14 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async clean(): Promise<void> {
     let dirPath = this.ctx.uiAbilityContext.tempDir;
     fs.rmdir(dirPath).then(() => {
-      Logger.info(TAG, "clean rmdir succeed");
+      Logger.info(`${TAG} clean rmdir succeed`);
     }).catch((err: BusinessError) => {
-      Logger.error(TAG, "clean rmdir err : " + JSON.stringify(err));
+      Logger.error(`${TAG} clean rmdir err = ${JSON.stringify(err)}`);
     });
   }
 
   async openCropper(options?: CropperOptions): Promise<Image>{
-    Logger.info(TAG, 'into openCropper : ' + JSON.stringify(options));
+    Logger.info(`${TAG} into openCropper = ${JSON.stringify(options)}`);
     let path = options?.path;
     if (this.isNullOrUndefined(path?.trim())) {
       return new Promise(async(res, rej) => {
@@ -677,7 +660,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
     let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
     let imgPath = await this.intoCropper(path, options);
-    Logger.info(TAG, 'into openCropper imgPath = ' + imgPath);
+    Logger.info(`${TAG} into openCropper imgPath = ${imgPath}`);
     if (this.isNullOrUndefined(imgPath)) {
       return new Promise(async(res, rej) => {
         rej('imgPath is null')
@@ -686,7 +669,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let tempFilePaths = null;
     let sourceFilePaths : Array<string> = [imgPath];
     if (qualityNumber !== 1 || forceJpg) {
-      Logger.info(TAG, 'into openCropper qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
+      Logger.info(`${TAG} into openCropper qualityNumber = ${qualityNumber} forceJpg = ${forceJpg}`);
       tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
     } else {
       tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
@@ -699,7 +682,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         let exifImageIS = image.createImageSource(exifFile.fd);
         exifInfo = await this.getImageExif(exifImageIS);
       } catch (err) {
-        Logger.error(TAG, 'into openCamera err :' + JSON.stringify(err));
+        Logger.error(`${TAG} into openCamera err = ${JSON.stringify(err)}`);
       }
     }
     return new Promise(async (res, rej) => {
@@ -758,7 +741,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     } else {
       videoImageInfo.mime = 'video/' + imageType;
       let url = 'fd://' + file.fd;
-      Logger.info(TAG, 'start avPlayer url:' + url);
+      Logger.info(`${TAG} start avPlayer url = ${url}`);
       avMetadataExtractor = await media.createAVMetadataExtractor();
       avMetadataExtractor.fdSrc = { fd: file.fd, offset: 0, length: length };
       try {
@@ -767,7 +750,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         videoImageInfo.width = Number(res.videoWidth);
         videoImageInfo.height = Number(res.videoHeight);
       } catch (error) {
-        Logger.error(TAG, 'get video info suc error:' + error);
+        Logger.error(`${TAG} get video info suc error = ${JSON.stringify(error)}`);
       }
     }
     fs.close(file.fd);
@@ -775,7 +758,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   }
 
   async intoCropper(filePath: string, options?: Options | CropperOptions) : Promise<string> {
-    Logger.info(TAG, 'into intoCropper : filePath = ' + filePath);
+    Logger.info(`${TAG} into intoCropper : filePath = ${filePath}`);
     let imagePath : string;
     let bundleName = this.ctx.uiAbilityContext.abilityInfo.bundleName;
     AppStorage.setOrCreate('filePath', filePath);
@@ -806,18 +789,18 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         this.ctx.uiAbilityContext.startAbilityForResult(want, (error, data) => {
           imagePath = AppStorage.get('cropImagePath') as string;
           AppStorage.setOrCreate('cropImagePath', '')
-          Logger.info(TAG, 'into intoCropper startAbility suc : ' + imagePath);
+          Logger.info(`${TAG} into intoCropper startAbility suc imagePath = ${imagePath}`);
           res(imagePath);
         });
       } catch (err) {
-        Logger.error(TAG, 'into intoCropper startAbility err : ' + JSON.stringify(err));
+        Logger.error(`${TAG} into intoCropper startAbility err = ${JSON.stringify(err)}`);
         res('')
       }
     });
   }
 
   async getImageExif(imageSource: image.ImageSource): Promise<Exif> {
-    Logger.info(TAG, 'into getImageExif:')
+    Logger.info(`${TAG} into getImageExif:`);
     let bitsPerSample;
     let orientation;
     let imageLength;
@@ -834,67 +817,67 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     try {
       bitsPerSample = await imageSource.getImageProperty(image.PropertyKey.BITS_PER_SAMPLE);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif bitsPerSample err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif bitsPerSample err = ${JSON.stringify(err)}`);
     }
     try {
       orientation = await imageSource.getImageProperty(image.PropertyKey.ORIENTATION);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif orientation err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif orientation err = ${JSON.stringify(err)}`);
     }
     try {
       imageLength = await imageSource.getImageProperty(image.PropertyKey.IMAGE_LENGTH);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif imageLength err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif imageLength err = ${JSON.stringify(err)}`);
     }
     try {
       imageWidth = await imageSource.getImageProperty(image.PropertyKey.IMAGE_WIDTH);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif imageWidth err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif imageWidth err = ${JSON.stringify(err)}`);
     }
     try {
       gpsLatitude = await imageSource.getImageProperty(image.PropertyKey.GPS_LATITUDE);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif gpsLatitude err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif gpsLatitude err = ${JSON.stringify(err)}`);
     }
     try {
       gpsLongitude = await imageSource.getImageProperty(image.PropertyKey.GPS_LONGITUDE);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif gpsLongitude err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif gpsLongitude err = ${JSON.stringify(err)}`);
     }
     try {
       gpsLatitudeRef = await imageSource.getImageProperty(image.PropertyKey.GPS_LATITUDE_REF);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif gpsLatitudeRef err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif gpsLatitudeRef err = ${JSON.stringify(err)}`);
     }
     try {
       gpsLongitudeRef = await imageSource.getImageProperty(image.PropertyKey.GPS_LONGITUDE_REF);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif gpsLongitudeRef err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif gpsLongitudeRef err = ${JSON.stringify(err)}`);
     }
     try {
       dateTimeOriginal = await imageSource.getImageProperty(image.PropertyKey.DATE_TIME_ORIGINAL);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif dateTimeOriginal err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif dateTimeOriginal err = ${JSON.stringify(err)}`);
     }
     try {
       exposureTime = await imageSource.getImageProperty(image.PropertyKey.EXPOSURE_TIME);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif exposureTime err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif exposureTime err = ${JSON.stringify(err)}`);
     }
     try {
       sceneType = await imageSource.getImageProperty(image.PropertyKey.SCENE_TYPE);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif sceneType err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif sceneType err = ${JSON.stringify(err)}`);
     }
     try {
       isoSpeedRatings = await imageSource.getImageProperty(image.PropertyKey.ISO_SPEED_RATINGS);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif isoSpeedRatings err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif isoSpeedRatings err = ${JSON.stringify(err)}`);
     }
     try {
       fNumber = await imageSource.getImageProperty(image.PropertyKey.F_NUMBER);
     } catch (err) {
-      Logger.info(TAG, 'into getImageExif fNumber err' + JSON.stringify(err))
+      Logger.info(`${TAG} into getImageExif fNumber err = ${JSON.stringify(err)}`);
     }
     return {
       BitsPerSample: bitsPerSample,
@@ -914,7 +897,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   }
 
   grantPermission(): Promise<boolean> {
-    Logger.info(TAG, 'into grantPermission:')
+    Logger.info(`${TAG} into grantPermission:`);
     const permissions: Array<Permissions> = [
       'ohos.permission.READ_MEDIA',
       'ohos.permission.WRITE_MEDIA',
@@ -926,7 +909,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
           res(data?.authResults[0] === 0)
         }).catch((err) =>{
         res(false)
-        Logger.info(TAG, 'grantPermission err = ' + JSON.stringify(err))
+        Logger.info(`${TAG} grantPermission err = ${JSON.stringify(err)}`);
       })
     });
   }
