@@ -1,9 +1,9 @@
 {
-  name: '@react-native-oh-tpl/image-crope-picker',
+  name: '@react-native-oh-tpl/react-native-image-crop-picker',
   "description": "Please describe the basic information.",
   main: 'index.ets',
   type: 'module',
-  version: '0.0.6',
+  version: '0.40.3-0.0.7',
   dependencies: {
     "@rnoh/react-native-openharmony": "file:../react_native_openharmony"
   },
