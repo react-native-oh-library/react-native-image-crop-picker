@@ -8,6 +8,7 @@ import media from '@ohos.multimedia.media';
 import util from '@ohos.util';
 import uri from '@ohos.uri';
 import picker from '@ohos.multimedia.cameraPicker';
+import photoAccessHelper from '@ohos.file.photoAccessHelper';
 import camera from '@ohos.multimedia.camera';
 import { BusinessError } from '@ohos.base';
 import fs, { Filter } from '@ohos.file.fs';
@@ -243,53 +244,35 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       })
     }
     let multiple = this.isNullOrUndefined(options.multiple) ? false : options.multiple;
-    let mediaType = options.mediaType == 'photo' ? 'FILTER_MEDIA_TYPE_IMAGE'
-      : (options.mediaType == 'video' ? 'FILTER_MEDIA_TYPE_VIDEO' : 'FILTER_MEDIA_TYPE_ALL');
+    let mediaType = options.mediaType == 'photo' ? photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE
+      : (options.mediaType == 'video' ? photoAccessHelper.PhotoViewMIMETypes.VIDEO_TYPE : photoAccessHelper.PhotoViewMIMETypes.IMAGE_VIDEO_TYPE);
 
     let writeTempFile = this.isNullOrUndefined(options.writeTempFile) ? true :options.writeTempFile;
     let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
     let forceJpg = this.isNullOrUndefined(options.forceJpg) ? false : options.forceJpg;
-
-    let want : Want = {};
-    if (multiple) {
-      want = {
-        "type": WANT_PARAM_URI_SELECT_MULTIPLE,
-        "action": ENTER_GALLERY_ACTION,
-        "parameters": {
-          uri: WANT_PARAM_URI_SELECT_MULTIPLE,
-          filterMediaType: mediaType,
-          maxSelectCount: maxFiles,
-          isShowSerialNum: isShowSerialNum,
-        },
-        "entities": []
+    try {
+      let photoSelectOptions = new photoAccessHelper.PhotoSelectOptions();
+      photoSelectOptions.MIMEType = mediaType;
+      photoSelectOptions.maxSelectNumber = multiple ? maxFiles : 1;
+      photoSelectOptions.isSearchSupported = false;
+      let photoPicker = new photoAccessHelper.PhotoViewPicker();
+      let result : photoAccessHelper.PhotoSelectResult = await photoPicker.select(photoSelectOptions);
+      let sourceFilePaths: Array<string> = result.photoUris as Array<string>;
+      let tempFilePaths = null;
+      Logger.info(TAG, 'into openPicker tempFilePaths = '+ JSON.stringify(sourceFilePaths));
+      if (qualityNumber !== 1 || forceJpg) {
+        Logger.info(TAG, 'qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
+        tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
+      } else {
+        tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
       }
-    } else {
-      want = {
-        "type": WANT_PARAM_URI_SELECT_SINGLE,
-        "action": ENTER_GALLERY_ACTION,
-        "parameters": {
-          uri: WANT_PARAM_URI_SELECT_SINGLE,
-          filterMediaType: mediaType,
-        },
-        "entities": []
-      }
-    }
-    let result: AbilityResult = await this.ctx.uiAbilityContext.startAbilityForResult(want as Want);
-    if (result.resultCode == -1) {
+      return this.getPickerResult(options, sourceFilePaths, tempFilePaths);
+    } catch (error) {
+      Logger.error(TAG, 'PhotoViewPicker failed err: ' + JSON.stringify(error));
       return new Promise(async(res, rej) => {
-        rej('result.resultCode is -1')
+        rej('PhotoViewPicker is failed')
       })
     }
-    let sourceFilePaths: Array<string> = result.want.parameters['select-item-list'] as Array<string>;
-    let tempFilePaths = null;
-    Logger.info(TAG, 'into openPicker tempFilePaths = '+ qualityNumber + ' ' + forceJpg);
-    if (qualityNumber !== 1 || forceJpg) {
-      Logger.info(TAG, 'qualityNumber = ' + qualityNumber + ' forceJpg = ' + forceJpg);
-      tempFilePaths = await this.compressPictures(qualityNumber * 100, forceJpg, sourceFilePaths);
-    } else {
-      tempFilePaths = writeTempFile ? this.getTempFilePaths(sourceFilePaths) : null;
-    }
-    return this.getPickerResult(options, sourceFilePaths, tempFilePaths);
   }
 
   getTempFilePaths(images : Array<string>): Array<string> {
@@ -324,9 +307,9 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let images = this.isNullOrUndefined(tempFilePaths) ? sourceFilePaths : tempFilePaths;
     Logger.info(TAG, 'into openPickerResult : images = '+ images);
     let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
-    let results = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null}
+    let results;
     for (let j = 0;j < images.length;j++) {
-
+      results = {duration:null,data:null,cropRect:null,path:null,size:0,width:0,height:0,mime:'',exif:null,localIdentifier:'',sourceURL:'',filename:'',creationDate:null,modificationDate:null};
       let value = images[j];
       if (this.isNullOrUndefined(value)) {
         return;
