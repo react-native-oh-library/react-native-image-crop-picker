@@ -29,6 +29,7 @@ const WANT_PARAM_URI_SELECT_MULTIPLE: string = 'multipleselect';
 const ENTER_GALLERY_ACTION: string = "ohos.want.action.photoPicker";
 const filePrefix = 'file://'
 const atManager = abilityAccessCtrl.createAtManager();
+const MINIMUM_VALUE = 1;
 
 let avMetadataExtractor: media.AVMetadataExtractor;
 
@@ -258,6 +259,11 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let photoPicker = new photoAccessHelper.PhotoViewPicker();
       let result : photoAccessHelper.PhotoSelectResult = await photoPicker.select(photoSelectOptions);
       let sourceFilePaths: Array<string> = result.photoUris as Array<string>;
+	  if (sourceFilePaths.length < MINIMUM_VALUE) {
+        return new Promise(async(res, rej) => {
+          rej('sourceFilePaths is empty')
+        })
+      }
       let tempFilePaths = null;
       Logger.info(`${TAG} into openPicker tempFilePaths ${JSON.stringify(sourceFilePaths)}`);
       if (qualityNumber !== 1 || forceJpg) {
