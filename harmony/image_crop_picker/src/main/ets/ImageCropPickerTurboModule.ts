@@ -1,5 +1,4 @@
 import type { TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
-import { TM } from "@rnoh/react-native-openharmony/generated/ts"
 import { TurboModule } from '@rnoh/react-native-openharmony/ts'
 import Logger from './Logger';
 import type Want from '@ohos.app.ability.Want';
@@ -16,7 +15,6 @@ import { JSON } from '@kit.ArkTS';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import { PermissionRequestResult } from '@ohos.abilityAccessCtrl';
 
-
 export type MediaType = 'photo' | 'video' | 'any';
 export type OrderType = 'asc' | 'desc' | 'none';
 export type ErrorCode = 'camera_unavailable' | 'permission' | 'others';
@@ -24,9 +22,6 @@ const MaxNumber = 5;
 const MinNumber = 1;
 const ImageQuality = 1;
 const TAG : string = 'ImageCropPickerTurboModule';
-const WANT_PARAM_URI_SELECT_SINGLE: string = 'singleselect';
-const WANT_PARAM_URI_SELECT_MULTIPLE: string = 'multipleselect';
-const ENTER_GALLERY_ACTION: string = "ohos.want.action.photoPicker";
 const filePrefix = 'file://'
 const atManager = abilityAccessCtrl.createAtManager();
 const MINIMUM_VALUE = 1;
@@ -212,7 +207,7 @@ export class AbilityResult {
   want?: Want;
 }
 
-export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageCropPicker.Spec{
+export class ImageCropPickerTurboModule extends TurboModule {
 
   constructor(protected ctx: TurboModuleContext) {
     super(ctx);
@@ -259,7 +254,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let photoPicker = new photoAccessHelper.PhotoViewPicker();
       let result : photoAccessHelper.PhotoSelectResult = await photoPicker.select(photoSelectOptions);
       let sourceFilePaths: Array<string> = result.photoUris as Array<string>;
-	  if (sourceFilePaths.length < MINIMUM_VALUE) {
+      if (sourceFilePaths.length < MINIMUM_VALUE) {
         return new Promise(async(res, rej) => {
           rej('sourceFilePaths is empty')
         })
