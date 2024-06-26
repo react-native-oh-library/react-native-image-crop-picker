@@ -11,11 +11,11 @@ class NativeRNCImageCropPickerTurboModuleFactoryDelegate : public TurboModuleFac
     public:
     SharedTurboModule createTurboModule(Context ctx, const std::string &name) const override {
         if (name == "ImageCropPicker") {
-            return std::make_shared<VisionCameraModule>(ctx, name);
+            return std::make_shared<ImageCropPickerTurboModule>(ctx, name);
         }
         return nullptr;
     };
-}
+};
 
 namespace rnoh {
     class ImageCropPickerPackage : public Package {
@@ -26,3 +26,4 @@ namespace rnoh {
         };
 	};
 }
+#endif
