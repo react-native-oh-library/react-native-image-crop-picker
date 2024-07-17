@@ -224,12 +224,6 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
 
   async openPicker(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
     Logger.info(`${TAG} into openPicker request ${JSON.stringify(options)}`);
-    let permissionResult = await this.grantPermission();
-    if (!permissionResult) {
-      return new Promise(async(res, rej) => {
-        rej('permission not approved')
-      })
-    }
     let minFiles = this.isNullOrUndefined(options?.minFiles) ? MinNumber : options.minFiles;
     let maxFiles = this.isNullOrUndefined(options?.maxFiles) ? MaxNumber : options.maxFiles;
     let isShowSerialNum = this.isNullOrUndefined(options?.showsSelectedCount) ? true : options?.showsSelectedCount;
@@ -391,12 +385,6 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async openCamera(options?: Options): Promise<Video[] | Video | ImageOrVideo[] | ImageOrVideo | Image [] | Image> {
     Logger.info(`${TAG} into openCamera request = ${JSON.stringify(options)}`);
     let cropping = this.isNullOrUndefined(options?.cropping) ? false : options?.cropping;
-    let permissionResult = await this.grantPermission();
-    if (!permissionResult) {
-      return new Promise(async(res, rej) => {
-        rej('permission not approved')
-      })
-    }
     let quality = options.compressImageQuality;
     if (!this.isNullOrUndefined(quality) && !(quality >= 0 && quality <= 1)) {
       return new Promise(async(res, rej) => {
@@ -424,7 +412,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let imgOrVideoPath = pickerResult.resultUri;
       isImg = this.isImage(imgOrVideoPath);
       if (isImg) {
-        let file = fs.openSync(imgOrVideoPath, fs.OpenMode.CREATE);
+        let file = fs.openSync(imgOrVideoPath, fs.OpenMode.READ_ONLY);
         try {
           let dstPath = this.ctx.uiAbilityContext.tempDir + '/rn_image_crop_picker_lib_temp_' + util.generateRandomUUID(true) + '.jpeg';
           fs.copyFileSync(file.fd, dstPath, 0);
@@ -646,12 +634,6 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     if (this.isNullOrUndefined(path?.trim())) {
       return new Promise(async(res, rej) => {
         rej('path is empty')
-      })
-    }
-    let permissionResult = await this.grantPermission();
-    if (!permissionResult) {
-      return new Promise(async(res, rej) => {
-        rej('permission not approved')
       })
     }
     let quality = options.compressImageQuality;
