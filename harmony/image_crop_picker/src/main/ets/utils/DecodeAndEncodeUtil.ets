@@ -1,7 +1,8 @@
 import fs from '@ohos.file.fs';
 import image from '@ohos.multimedia.image';
 import { Constants } from '../utils/Constants';
-import mediaLibrary from '@ohos.multimedia.mediaLibrary';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { fileIo } from '@kit.CoreFileKit'
 
 
 const TAG: string = 'imageCrop_Decode_Encode';
@@ -38,20 +39,18 @@ export async function encode(component: Object, pixelMap: PixelMap) {
   // Get album's path.
   const context = getContext(component);
   console.log(TAG,'context---',JSON.stringify(context))
-  const media = mediaLibrary.getMediaLibrary(context);
+  const media = photoAccessHelper.getPhotoAccessHelper(context);
   console.log(TAG,'media---',JSON.stringify(media))
-  const publicPath = await media.getPublicDirectory(mediaLibrary.DirectoryType.DIR_IMAGE);
   const currentTime = new Date().getTime();
   // Create image asset.
-  const imageAssetInfo = await media.createAsset(
-    mediaLibrary.MediaType.IMAGE,
+  const filePath = await media.createAsset(
+    photoAccessHelper.PhotoType.IMAGE,
     `${Constants.IMAGE_PREFIX}_${currentTime}${Constants.IMAGE_FORMAT}`,
-    publicPath
   );
-  const imageFd = await imageAssetInfo.open(Constants.ENCODE_FILE_PERMISSION);
-  await fs.write(imageFd, imageData);
+
+  let file = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE)
+  await fs.write(file.fd, imageData);
   // Image resource release.
-  await imageAssetInfo.close(imageFd);
   imagePackerApi.release();
   await media.release();
 }
