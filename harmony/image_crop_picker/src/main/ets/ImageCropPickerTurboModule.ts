@@ -716,7 +716,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let imageIS = image.createImageSource(file.fd)
       let imagePM = await imageIS.createPixelMap()
       let imgInfo = await imagePM.getImageInfo();
-      videoImageInfo.data = includeBase64 ? this.imageToBase64(filePath) : null;
+      videoImageInfo.data = includeBase64 ? this.imageToBase64(tempFilePath || filePath) : null;
       videoImageInfo.height = imgInfo.size.height;
       videoImageInfo.width = imgInfo.size.width;
       videoImageInfo.exif = exifInfo;
