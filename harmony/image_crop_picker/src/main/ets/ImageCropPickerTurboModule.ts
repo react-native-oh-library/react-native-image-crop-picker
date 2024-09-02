@@ -693,16 +693,16 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     })
   }
 
-  async getFileInfo(includeBase64: boolean, filePath: string, tempFilePath: string, exifInfo: Exif) : Promise<VideoImageInfo>{
+  async getFileInfo(includeBase64: boolean, filePath: string, compressOrTempFilePath: string, exifInfo: Exif) : Promise<VideoImageInfo>{
     let videoImageInfo : VideoImageInfo = {duration: null};
     let imageType;
-    let i = this.isNullOrUndefined(tempFilePath) ? filePath.lastIndexOf('/') : tempFilePath.lastIndexOf('/')
-    let fileName = this.isNullOrUndefined(tempFilePath) ? filePath.substring(i + 1) : tempFilePath.substring(i + 1)
+    let i = this.isNullOrUndefined(compressOrTempFilePath) ? filePath.lastIndexOf('/') : compressOrTempFilePath.lastIndexOf('/')
+    let fileName = this.isNullOrUndefined(compressOrTempFilePath) ? filePath.substring(i + 1) : compressOrTempFilePath.substring(i + 1)
     i = filePath.lastIndexOf('.')
     if (i != -1) {
       imageType = filePath.substring(i + 1)
     }
-    videoImageInfo.path = this.isNullOrUndefined(tempFilePath) ? filePrefix + filePath : tempFilePath + filePath;
+    videoImageInfo.path = this.isNullOrUndefined(compressOrTempFilePath) ? filePrefix + filePath : compressOrTempFilePath + filePath;
     videoImageInfo.filename = fileName;
     videoImageInfo.mime = 'image/' + imageType;
 
@@ -716,7 +716,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       let imageIS = image.createImageSource(file.fd)
       let imagePM = await imageIS.createPixelMap()
       let imgInfo = await imagePM.getImageInfo();
-      videoImageInfo.data = includeBase64 ? this.imageToBase64(tempFilePath || filePath) : null;
+      videoImageInfo.data = includeBase64 ? this.imageToBase64(compressOrTempFilePath || filePath) : null;
       videoImageInfo.height = imgInfo.size.height;
       videoImageInfo.width = imgInfo.size.width;
       videoImageInfo.exif = exifInfo;
