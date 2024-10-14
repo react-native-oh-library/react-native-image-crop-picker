@@ -13,14 +13,10 @@ const TAG: string = 'imageCrop_Decode_Encode';
  * @return pixelMa.
  */
 export async function getPixelMap(uri: string){
-
   const file = fs.openSync(uri, fs.OpenMode.READ_ONLY);
-  console.log('imageEdit_Decode file:', JSON.stringify(file))
   const fd = file?.fd;
-  console.log('imageEdit_Decode fd:', JSON.stringify(fd))
   // path为已获得的沙箱路径
   const imageSource = image.createImageSource(fd);
-  console.log('imageEdit_Decode imageSource:', JSON.stringify(imageSource))
   const pixelMap = await imageSource.createPixelMap({
     editable: true
   });
@@ -38,9 +34,7 @@ export async function encode(component: Object, pixelMap: PixelMap) {
   const imageData = await imagePackerApi.packing(newPixelMap, packOptions);
   // Get album's path.
   const context = getContext(component);
-  console.log(TAG,'context---',JSON.stringify(context))
   const media = photoAccessHelper.getPhotoAccessHelper(context);
-  console.log(TAG,'media---',JSON.stringify(media))
   const currentTime = new Date().getTime();
   // Create image asset.
   const filePath = await media.createAsset(
