@@ -1,6 +1,3 @@
-
-
-
 @Observed
 export class Rectangle {
   left: number;

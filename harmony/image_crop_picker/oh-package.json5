@@ -3,8 +3,8 @@
   "description": "Please describe the basic information.",
   main: 'index.ets',
   type: 'module',
-  version: '0.40.3-0.0.12',
+  version: '0.40.3-0.0.13',
   dependencies: {
-    "@rnoh/react-native-openharmony": "file:../react_native_openharmony"
+    "@rnoh/react-native-openharmony": "file:../libs/react_native_openharmony-5.0.0.500.har"
   },
 }

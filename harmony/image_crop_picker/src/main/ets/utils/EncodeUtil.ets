@@ -1,18 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import fs from '@ohos.file.fs';
 import image from '@ohos.multimedia.image';
 import Logger from '../Logger';
