@@ -2,18 +2,18 @@ import image from '@ohos.multimedia.image';
 import Logger from '../Logger';
 import display from '@ohos.display';
 import router from '@ohos.router';
-import {BusinessError} from '@ohos.base';
+import { BusinessError } from '@ohos.base';
 import { Rectangle } from '../utils/types';
 import { Event } from '../utils/jul';
 import { Action, DownPos, DragObj } from '../utils/CropModel';
 import { Constants } from '../utils/Constants';
-import {getPixelMap} from '../utils/DecodeAndEncodeUtil';
-import {RotateType} from '../viewmodel/viewAndModel';
+import { getPixelMap } from '../utils/DecodeAndEncodeUtil';
+import { RotateType } from '../viewmodel/viewAndModel';
 import { encode } from '../utils/EncodeUtil';
+
 let hotspotsWidth: number = 18;
 const PHONE_MIN_CROP: number = 43;
 const TAG: string = 'ImageEditInfo';
-
 
 @Extend(Row)
 function rowStyle() {
@@ -65,43 +65,44 @@ function columnStyle2(hasMoreSplitLine: boolean) {
 
 @Extend(Image)
 function iconStyle() {
-  .size({ width: 24, height: 24})
+  .size({ width: 24, height: 24 })
   .fillColor('#FFFFFF')
   .opacity(0.9)
 }
 
 @Extend(Row)
 function bottomIconStyle() {
-  .size({ width: '20%', height: '100%'})
+  .size({ width: '20%', height: '100%' })
   .justifyContent(FlexAlign.Center)
 }
 
 @Extend(Text)
 function textStyle() {
-  .size({ width: '20%', height: '100%'})
+  .size({ width: '20%', height: '100%' })
   .textAlign(TextAlign.Center)
 }
 
 @Entry
 @Component
 export struct ImageEditInfo {
-
-  @StorageProp('filePath') filePath:string = '';
-  @StorageProp('cropperRotate') cropperRotate:string = '';
+  @StorageProp('filePath') filePath: string = '';
+  @StorageProp('cropperRotate') cropperRotate: string = '';
   setting: RenderingContextSettings = new RenderingContextSettings(true);
   context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.setting);
   @Provide('isPixelMapChange') @Watch('flushPixelMap') isPixelMapChange: boolean = false;
+  @StorageProp('initWidth') initWidth: number = 0;
+  @StorageProp('initHeight') initHeight: number = 0;
   @StorageProp('textTitle') title: string = '';
   @StorageProp('cancelText') cancel: string = '';
   @StorageProp('cancelTextColor') cancelTextColor: string = '';
   @StorageProp('chooseText') choose: string = '';
   @StorageProp('chooseTextColor') chooseTextColor: string = '';
   @StorageProp('freeStyleCropEnabled') freeStyleCropEnabled: boolean = false;
+  @StorageProp('enableRotationGesture') enableRotationGesture: boolean = false;
   @State uri: string = '';
   @State icon?: image.PixelMap = undefined;
   @State imageWith: number = 0;
   @State imageHeight: number = 0;
-
   @State screenWidth: number = 0;
   @State screenHeight: number = 0;
   DEFAULT_MASK_STYLE: string = 'rgba(0, 0, 0, 0.3)';
@@ -120,9 +121,11 @@ export struct ImageEditInfo {
   @State clipRatio: number = 0;
   @State imageFlag: boolean = true;
   @State angle: number = 0;
+  @State rotateValue: number = 0;
   private minSize = PHONE_MIN_CROP // 最小宽高
   private dragObj: DragObj = new DragObj(false);
-  private clb:number =1
+  private clb: number = 1
+
   pixelInit(path: string) {
     this.angle = 0;
     this.screenWidth = px2vp(display.getDefaultDisplaySync().width);
@@ -150,19 +153,31 @@ export struct ImageEditInfo {
   }
 
   initCropBox(imageWidth: number, imageHeight: number, screenWidth: number, screenHeight: number) {
-    if (imageHeight/imageWidth < screenHeight/screenWidth) {
+    if (imageHeight / imageWidth < screenHeight / screenWidth) {
       this.clb = imageWidth / (screenWidth - hotspotsWidth * 2);
     } else {
       this.clb = imageHeight / (screenHeight - hotspotsWidth * 2 - 56 * 2);
     }
     let imgHeight = Math.round(imageHeight / this.clb);
     let imgWidth = Math.round(imageWidth / this.clb);
+
     let left = (screenWidth - imgWidth) / 2;
     let top = (screenHeight - imgHeight) / 2 - 56;
     let right = imgWidth + left;
     let bottom = imgHeight + top;
+
+    this.maxClipSize = new Rectangle(left, top, right, bottom);
+
+    if (this.initWidth > 0) {
+      left = (screenWidth - this.initWidth) / 2;
+      right = this.initWidth + left;
+    }
+    if (this.initHeight > 0) {
+      top = (screenHeight - this.initHeight) / 2 - 56;
+      bottom = this.initHeight + top;
+    }
+
     this.clipSize = new Rectangle(left, top, right, bottom);
-    this.maxClipSize = this.clipSize;
     this.display = new Rectangle(0, 0, this.screenWidth, this.screenHeight - 56 * 2);
   }
 
@@ -175,7 +190,7 @@ export struct ImageEditInfo {
     this.clearData(arrayData);
   }
 
-  clearData(arrayData : Array<string>) {
+  clearData(arrayData: Array<string>) {
     for (let i = 0; i < arrayData.length; i++) {
       AppStorage.setOrCreate(arrayData[i], '');
     }
@@ -189,7 +204,7 @@ export struct ImageEditInfo {
       .textAlign(TextAlign.Center)
       .width('100%')
       .height(56)
-      .position({x: 0, y : 0})
+      .position({ x: 0, y: 0 })
       .backgroundColor(Color.Black)
   }
 
@@ -198,8 +213,8 @@ export struct ImageEditInfo {
     Stack() {
       Image(this.icon)
         .objectFit(ImageFit.Contain)
-        .position({x: this.imgOffSetX, y: this.imgOffSetY})
-        .scale({ x: this.imgScale, y: this.imgScale})
+        .position({ x: this.imgOffSetX, y: this.imgOffSetY })
+        .scale({ x: this.imgScale, y: this.imgScale })
         .padding(hotspotsWidth)
         .width('100%')
         .height('100%')
@@ -207,25 +222,25 @@ export struct ImageEditInfo {
       Row()
         .height(this.clipSize.height())
         .width(this.clipSize.left - this.display.left)
-        .position({x:this.display.left,y:this.clipSize.top})
+        .position({ x: this.display.left, y: this.clipSize.top })
         .backgroundColor(this.DEFAULT_MASK_STYLE)
 
       Row()
         .height(this.clipSize.top - this.display.top)
         .width(this.display.width())
-        .position({x:this.display.left,y:this.display.top})
+        .position({ x: this.display.left, y: this.display.top })
         .backgroundColor(this.DEFAULT_MASK_STYLE)
 
       Row()
         .height(this.clipSize.height())
         .width(this.display.right - this.clipSize.right)
-        .position({x:this.clipSize.right,y:this.clipSize.top})
+        .position({ x: this.clipSize.right, y: this.clipSize.top })
         .backgroundColor(this.DEFAULT_MASK_STYLE)
 
       Row()
         .height(this.display.bottom - this.clipSize.bottom)
         .width(this.display.width())
-        .position({x:this.display.left,y:this.clipSize.bottom})
+        .position({ x: this.display.left, y: this.clipSize.bottom })
         .backgroundColor(this.DEFAULT_MASK_STYLE)
 
       RectangleSizer({
@@ -240,7 +255,7 @@ export struct ImageEditInfo {
     .backgroundColor(Color.Black)
     .onTouch(this.touchHandler)
     .gesture(GestureGroup(GestureMode.Exclusive,
-      PinchGesture({ fingers: Constants.DOUBLE_NUMBER})
+      PinchGesture({ fingers: Constants.DOUBLE_NUMBER })
         .onActionUpdate((event?: GestureEvent) => {
           if (event) {
             this.imgScale = this.currentScale * event.scale;
@@ -261,15 +276,29 @@ export struct ImageEditInfo {
           this.preOffsetY = this.imgOffSetY;
         })
         .onActionUpdate((event?: GestureEvent) => {
-          if (event && this.imageFlag ) {
+          if (event && this.imageFlag) {
             this.imgOffSetX = this.preOffsetX + event.offsetX;
             this.imgOffSetY = this.preOffsetY + event.offsetY;
             Logger.info(TAG, "into flushPixelMapChange x : " + this.imgOffSetX + " y : " + this.imgOffSetY)
           }
+        }),
+      RotationGesture()
+        .onActionEnd((event: GestureEvent) => {
+          if (this.enableRotationGesture) {
+            this.rotateValue = event.angle;
+            const sum = Math.ceil(this.rotateValue / 90);
+            this.resetImg();
+            this.imgOffSetX = 0;
+            this.imgOffSetY = 0;
+            if (sum > 0) {
+              this.rotateImage(RotateType.CLOCKWISE);
+            } else {
+              this.rotateImage(RotateType.ANTI_CLOCK);
+            }
+          }
         })
     ))
   }
-
 
   @Builder
   BottomToolbar() {
@@ -292,6 +321,7 @@ export struct ImageEditInfo {
           });
       }
       .bottomIconStyle();
+
       Row() {
         Image($r('app.media.ic_reset'))
           .iconStyle()
@@ -303,6 +333,7 @@ export struct ImageEditInfo {
           });
       }
       .bottomIconStyle();
+
       Row() {
         Image($r('app.media.ic_clockwise'))
           .iconStyle()
@@ -315,20 +346,23 @@ export struct ImageEditInfo {
           });
       }
       .bottomIconStyle();
+
       Text(this.choose)
         .textStyle()
         .fontColor(this.chooseTextColor)
-        .onClick(()=>{
+        .onClick(() => {
           if (this.icon) {
             let xOff = this.imageWith * (this.imgScale - 1) / 2;
             let yOff = this.imageHeight * (this.imgScale - 1) / 2;
             let region: image.Region = { x: 0, y: 0, size: { height: this.imageHeight, width: this.imageWith } };
-            region.x = (this.clipSize.left - this.maxClipSize.left) / this.imgScale * this.clb + (xOff/this.imgScale) - this.imgOffSetX / this.imgScale * this.clb;
+            region.x =
+              (this.clipSize.left - this.maxClipSize.left) / this.imgScale * this.clb + (xOff / this.imgScale) - this.imgOffSetX / this.imgScale * this.clb;
             region.size.width = this.imageWith - region.x - (this.maxClipSize.right - this.clipSize.right) / this.imgScale * this.clb
-              - (xOff/this.imgScale) - this.imgOffSetX / this.imgScale * this.clb;
-            region.y = (this.clipSize.top - this.maxClipSize.top) / this.imgScale * this.clb + (yOff/this.imgScale) - this.imgOffSetY / this.imgScale * this.clb;
+              - (xOff / this.imgScale) - this.imgOffSetX / this.imgScale * this.clb;
+            region.y =
+              (this.clipSize.top - this.maxClipSize.top) / this.imgScale * this.clb + (yOff / this.imgScale) - this.imgOffSetY / this.imgScale * this.clb;
             region.size.height = this.imageHeight - region.y - (this.maxClipSize.bottom - this.clipSize.bottom) / this.imgScale * this.clb
-              - (yOff/this.imgScale) - this.imgOffSetY / this.imgScale * this.clb;
+              - (yOff / this.imgScale) - this.imgOffSetY / this.imgScale * this.clb;
             this.icon.crop(region, async (err: BusinessError) => {
               if (err != undefined) {
                 console.error("Failed to crop pixelmap.");
@@ -336,6 +370,12 @@ export struct ImageEditInfo {
               } else {
                 let imgPath = await encode(this, this.icon);
                 AppStorage.setOrCreate('cropImagePath', imgPath)
+                AppStorage.setOrCreate('cropRect', {
+                  width: region.size.width,
+                  height: region.size.height,
+                  x: region.x,
+                  y: region.y
+                })
                 router.back()
               }
             })
@@ -344,12 +384,12 @@ export struct ImageEditInfo {
     }
     .width('100%')
     .height(56)
-    .position({x: 0, y : (this.screenHeight - 56)})
+    .position({ x: 0, y: (this.screenHeight - 56) })
     .backgroundColor(Color.Black)
   }
 
   rotateImage(rotateType: RotateType) {
-    Logger.info(TAG, "into rotateImage rotateType : " +rotateType)
+    Logger.info(TAG, "into rotateImage rotateType : " + rotateType)
     if (rotateType === RotateType.CLOCKWISE) {
       if (!this.icon) {
         Logger.info(TAG, "into rotateImage return")
@@ -380,20 +420,19 @@ export struct ImageEditInfo {
     }
   }
 
-  flushPixelMapChange(angle : number) {
+  flushPixelMapChange(angle: number) {
     this.isPixelMapChange = !this.isPixelMapChange;
-    let clipAngle = angle/90;
+    let clipAngle = angle / 90;
     switch (Math.abs(clipAngle % 4)) {
       case 0:
       case 2:
         this.initCropBox(this.imageWith, this.imageHeight, this.screenWidth, this.screenHeight);
-      break;
+        break;
       default:
         this.initCropBox(this.imageHeight, this.imageWith, this.screenWidth, this.screenHeight);
-      break;
+        break;
     }
   }
-
 
   flushPixelMap() {
     const temp = this.icon;
@@ -411,7 +450,7 @@ export struct ImageEditInfo {
     // 图片的宽高
     let imageWidth = this.imageHeight;
     let imageHeight = this.imageWith;
-    if ([0, 2].includes(Math.abs((this.angle/90) % 4))) {
+    if ([0, 2].includes(Math.abs((this.angle / 90) % 4))) {
       imageWidth = this.imageWith;
       imageHeight = this.imageHeight;
     }
@@ -440,14 +479,14 @@ export struct ImageEditInfo {
     // 计算图片的实际宽高和实际偏移量
     actualHeight = Math.round(imageHeight / this.clb);
     actualWidth = Math.round(imageWidth / this.clb);
-    extraLeft = (this.screenWidth- actualWidth) / 2;
+    extraLeft = (this.screenWidth - actualWidth) / 2;
     extraTop = (this.screenHeight - actualHeight) / 2 - 56;
     extraRight = actualWidth + extraLeft;
     extraBottom = actualHeight + extraTop;
 
     // 计算缩放偏移量
-    scaleOffsetX = this.imgScale > 1 ? 0- ((extraRight - extraLeft) * this.imgScale - (extraRight - extraLeft)) / 2 : 0;
-    scaleOffsetY = this.imgScale > 1 ? 0- ((extraBottom - extraTop) * this.imgScale - (extraBottom - extraTop)) / 2 : 0;
+    scaleOffsetX = this.imgScale > 1 ? 0 - ((extraRight - extraLeft) * this.imgScale - (extraRight - extraLeft)) / 2 : 0;
+    scaleOffsetY = this.imgScale > 1 ? 0 - ((extraBottom - extraTop) * this.imgScale - (extraBottom - extraTop)) / 2 : 0;
 
     // 计算图片四个边缘的位置
     const imageRight = this.imgOffSetX + actualWidth;
@@ -483,7 +522,7 @@ export struct ImageEditInfo {
     this.imgOffSetY = imgOffSetY;
   }
 
-  touchHandler: (event: TouchEvent | undefined) => void = (event: TouchEvent | undefined) : void => {
+  touchHandler: (event: TouchEvent | undefined) => void = (event: TouchEvent | undefined): void => {
     if (!event) {
       return;
     }
@@ -499,10 +538,10 @@ export struct ImageEditInfo {
 
     if (event.type === TouchType.Move) {
       if (!this.dragObj.dragging) {
-        this.imageFlag =true;
+        this.imageFlag = true;
         return;
       }
-      this.imageFlag =false;
+      this.imageFlag = false;
       if (this.freeStyleCropEnabled) {
         return;
       }
@@ -656,12 +695,12 @@ export struct ImageEditInfo {
         newPosition.bottom = this.maxClipSize.bottom;
       }
     }
-  this.clipSize = new Rectangle(newPosition.left, newPosition.top, newPosition.right, newPosition.bottom);
+    this.clipSize = new Rectangle(newPosition.left, newPosition.top, newPosition.right, newPosition.bottom);
 
   }
 
   build() {
-    Stack(){
+    Stack() {
       this.CropImageArea();
       this.CropTitleBar();
       this.BottomToolbar();
@@ -686,7 +725,7 @@ export struct RectangleSizer {
 
   build() {
     Stack() {
-      Flex( { direction: FlexDirection.Column, justifyContent: FlexAlign.SpaceBetween }) {
+      Flex({ direction: FlexDirection.Column, justifyContent: FlexAlign.SpaceBetween }) {
         Row().rowStyle().id('petalClip_frostedGlass_top')
         Row().rowStyle2(this.isScrolling).id('petalClip_frostedGlass_row_81_1')
         Row().rowStyle2(this.isScrolling).id('petalClip_frostedGlass_row_81_2')
@@ -721,7 +760,7 @@ export struct RectangleSizer {
       .padding(hotspotsWidth)
 
       Flex({ direction: FlexDirection.Column, justifyContent: FlexAlign.SpaceBetween }) {
-        Flex( { direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
+        Flex({ direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
           Row()
             .width(20)
             .height(20)
@@ -740,7 +779,7 @@ export struct RectangleSizer {
         }
         .height(Math.min(20, this.clipSize.height() / 3 + 4)).clip(true)
 
-        Flex( { direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
+        Flex({ direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
           Row()
             .width(20)
             .height(20)
@@ -754,7 +793,7 @@ export struct RectangleSizer {
         }
         .height(Math.min(20, this.clipSize.height() / 3 + 1)).clip(true)
 
-        Flex( { direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
+        Flex({ direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween }) {
           Row()
             .width(20)
             .height(Math.min(20, this.clipSize.height() / 3 + 4))

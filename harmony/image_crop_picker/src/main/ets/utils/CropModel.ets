@@ -1,6 +1,3 @@
-
-
-
 export class CropScaleClass {
   value: number;
   ratio: string;
