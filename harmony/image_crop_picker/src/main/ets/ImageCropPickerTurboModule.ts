@@ -16,10 +16,15 @@ import { JSON } from '@kit.ArkTS';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import { PermissionRequestResult } from '@ohos.abilityAccessCtrl';
 
+import { window } from '@kit.ArkUI';
+
 
 export type MediaType = 'photo' | 'video' | 'any';
+
 export type OrderType = 'asc' | 'desc' | 'none';
+
 export type ErrorCode = 'camera_unavailable' | 'permission' | 'others';
+
 const MaxNumber = 5;
 const MinNumber = 1;
 const ImageQuality = 1;
@@ -34,18 +39,24 @@ const MINIMUM_VALUE = 1;
 let avMetadataExtractor: media.AVMetadataExtractor;
 
 export type SmartAlbums = | 'Regular' | 'SyncedEvent' | 'SyncedFaces';
+
 export type CompressVideoPresets = | 'LowQuality' | 'MediumQuality' | 'HighestQuality' | 'Passthrough';
+
 export type CropperOptions = ImageOptions & {
   path: string;
 }
+
 export type Options = AnyOptions | VideoOptions | ImageOptions;
+
 export type AnyOptions = Omit<ImageOptions, 'mediaType'> & Omit<VideoOptions, 'mediaType'> & {
   mediaType?: 'any';
 };
+
 export type VideoOptions = CommonOptions & {
   mediaType: 'video';
   compressVideoPreset?: CompressVideoPresets;
 };
+
 export type ImageOptions = CommonOptions & {
   mediaType: MediaType;
   width?: number;
@@ -213,7 +224,6 @@ export class AbilityResult {
 }
 
 export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageCropPicker.Spec {
-
   constructor(protected ctx: TurboModuleContext) {
     super(ctx);
   }
@@ -269,7 +279,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       }
 
       let tempFilePath = null;
-      const isImg = this.isImage(tempFilePaths[0]);
+      const isImg = tempFilePaths ? this.isImage(tempFilePaths[0]) : false;
       if (!multiple && isImg && cropping) {
         const imgCropPath = await this.intoCropper(tempFilePaths[0], options);
         if (!this.isNullOrUndefined(imgCropPath)) {
@@ -279,15 +289,29 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         let exifInfo;
         if (options?.includeExif) {
           try {
-            let exifFile = fs.openSync(tempFilePaths[0], fs.OpenMode.READ_ONLY);
+            let exifFile = fs.openSync(tempFilePath, fs.OpenMode.READ_ONLY);
             let exifImageIS = image.createImageSource(exifFile.fd);
             exifInfo = await this.getImageExif(exifImageIS);
           } catch (err) {
             Logger.error(`${TAG} into getPickerResult err : ${JSON.stringify(err)}`);
           }
         }
-        let imgResult: Image = { data: null, cropRect: null, path: null, size: 0, width: 0, height: 0, mime: '', exif: null, localIdentifier: '', sourceURL: '', filename: '', creationDate: null, modificationDate: null };
-        await this.getFileInfo(options?.includeBase64, imgCropPath, null, exifInfo).then((imageInfo) => {
+        let imgResult: Image = {
+          data: null,
+          cropRect: null,
+          path: null,
+          size: 0,
+          width: 0,
+          height: 0,
+          mime: '',
+          exif: null,
+          localIdentifier: '',
+          sourceURL: '',
+          filename: '',
+          creationDate: null,
+          modificationDate: null
+        };
+        await this.getFileInfo(options?.includeBase64, tempFilePath, null, exifInfo).then((imageInfo) => {
           imgResult.path = filePrefix + imgCropPath;
           imgResult.exif = imageInfo.exif;
           imgResult.data = imageInfo.data;
@@ -347,7 +371,22 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
     let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
     let results;
     for (let j = 0; j < images.length; j++) {
-      results = { duration: null, data: null, cropRect: null, path: null, size: 0, width: 0, height: 0, mime: '', exif: null, localIdentifier: '', sourceURL: '', filename: '', creationDate: null, modificationDate: null };
+      results = {
+        duration: null,
+        data: null,
+        cropRect: null,
+        path: null,
+        size: 0,
+        width: 0,
+        height: 0,
+        mime: '',
+        exif: null,
+        localIdentifier: '',
+        sourceURL: '',
+        filename: '',
+        creationDate: null,
+        modificationDate: null
+      };
       let value = images[j];
       if (this.isNullOrUndefined(value)) {
         return;
@@ -431,8 +470,35 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       })
     }
     let isImg = false;
-    let imgResult: Image = { data: null, cropRect: null, path: null, size: 0, width: 0, height: 0, mime: '', exif: null, localIdentifier: '', sourceURL: '', filename: '', creationDate: null, modificationDate: null };
-    let videoResult: Video = { duration: null, path: null, size: 0, width: 0, height: 0, mime: '', exif: null, localIdentifier: '', sourceURL: '', filename: '', creationDate: null, modificationDate: null };
+    let imgResult: Image = {
+      data: null,
+      cropRect: null,
+      path: null,
+      size: 0,
+      width: 0,
+      height: 0,
+      mime: '',
+      exif: null,
+      localIdentifier: '',
+      sourceURL: '',
+      filename: '',
+      creationDate: null,
+      modificationDate: null
+    };
+    let videoResult: Video = {
+      duration: null,
+      path: null,
+      size: 0,
+      width: 0,
+      height: 0,
+      mime: '',
+      exif: null,
+      localIdentifier: '',
+      sourceURL: '',
+      filename: '',
+      creationDate: null,
+      modificationDate: null
+    };
     let useFrontCamera = this.isNullOrUndefined(options.useFrontCamera) ? false : options.useFrontCamera;
     let writeTempFile = this.isNullOrUndefined(options?.writeTempFile) ? true : options?.writeTempFile;
     let includeBase64 = this.isNullOrUndefined(options.includeBase64) ? false : options.includeBase64;
@@ -622,11 +688,13 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
   async getListFile(): Promise<FilePathResult> {
     let filePathResult: FilePathResult = { result: [] };
     let filesDir = this.ctx.uiAbilityContext.tempDir;
+
     class ListFileOption {
       public recursion: boolean = false;
       public listNum: number = 0;
       public filter: Filter = {};
     }
+
     let option = new ListFileOption();
     option.filter.suffix = ['.jpg'];
     option.filter.displayName = ['*'];
@@ -682,7 +750,21 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
         rej('quality is error')
       })
     }
-    let result: Image = { data: null, cropRect: null, path: null, size: 0, width: 0, height: 0, mime: '', exif: null, localIdentifier: '', sourceURL: '', filename: '', creationDate: null, modificationDate: null };
+    let result: Image = {
+      data: null,
+      cropRect: null,
+      path: null,
+      size: 0,
+      width: 0,
+      height: 0,
+      mime: '',
+      exif: null,
+      localIdentifier: '',
+      sourceURL: '',
+      filename: '',
+      creationDate: null,
+      modificationDate: null
+    };
     let includeExif = this.isNullOrUndefined(options?.includeExif) ? false : options?.includeExif;
     let writeTempFile = this.isNullOrUndefined(options?.writeTempFile) ? true : options?.writeTempFile;
     let qualityNumber = this.isNullOrUndefined(options.compressImageQuality) ? ImageQuality : options.compressImageQuality;
@@ -819,6 +901,7 @@ export class ImageCropPickerTurboModule extends TurboModule implements TM.ImageC
       AppStorage.setOrCreate('showCropGuidelines', showCropGuidelines);
       AppStorage.setOrCreate('showCropFrame', showCropFrame);
       AppStorage.setOrCreate('freeStyleCropEnabled', freeStyleCropEnabled);
+
       try {
         let want: Want = {
           "bundleName": bundleName,
